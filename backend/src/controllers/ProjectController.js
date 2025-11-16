@@ -205,4 +205,4 @@ class ProjectController {
   }
 }
 
-export default new ProjectController();
+export default ProjectController;

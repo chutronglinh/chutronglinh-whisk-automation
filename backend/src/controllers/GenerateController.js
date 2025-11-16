@@ -371,4 +371,4 @@ class GenerateController {
   }
 }
 
-export default new GenerateController();
+export default GenerateController;
