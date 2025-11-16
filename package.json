@@ -1,0 +1,15 @@
+{
+  "name": "whisk-automation",
+  "version": "1.0.0",
+  "description": "Google Whisk Automation System",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "keywords": ["whisk", "automation", "image-generation"],
+  "author": "",
+  "license": "ISC"
+}
