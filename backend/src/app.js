@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/database.js';
+import { connectDB } from './config/database.js';
 import './services/QueueService.js';
 
 // Import routes
