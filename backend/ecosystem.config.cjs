@@ -1,5 +1,6 @@
 module.exports = {
   apps: [
+    // API Server
     {
       name: 'whisk-api',
       script: './src/app.js',
@@ -17,37 +18,83 @@ module.exports = {
       min_uptime: '10s',
       max_memory_restart: '1G'
     },
+
+    // Manual Login Worker
+    {
+      name: 'whisk-worker-login',
+      script: './src/workers/ManualLoginWorker.js',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        DISPLAY: ':0'
+      },
+      error_file: './logs/worker-login-error.log',
+      out_file: './logs/worker-login-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_restarts: 5,
+      min_uptime: '10s',
+      max_memory_restart: '500M'
+    },
+
+    // Profile Setup Worker
     {
       name: 'whisk-worker-profile',
       script: './src/workers/ProfileWorker.js',
       instances: 1,
+      env: {
+        NODE_ENV: 'production'
+      },
       error_file: './logs/worker-profile-error.log',
       out_file: './logs/worker-profile-out.log',
-      autorestart: true
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_memory_restart: '500M'
     },
+
+    // Cookie Extraction Worker
     {
       name: 'whisk-worker-cookie',
       script: './src/workers/CookieWorker.js',
       instances: 2,
+      env: {
+        NODE_ENV: 'production'
+      },
       error_file: './logs/worker-cookie-error.log',
       out_file: './logs/worker-cookie-out.log',
-      autorestart: true
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_memory_restart: '500M'
     },
+
+    // Project Creation Worker
     {
       name: 'whisk-worker-project',
       script: './src/workers/ProjectWorker.js',
       instances: 2,
+      env: {
+        NODE_ENV: 'production'
+      },
       error_file: './logs/worker-project-error.log',
       out_file: './logs/worker-project-out.log',
-      autorestart: true
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_memory_restart: '500M'
     },
+
+    // Image Generation Worker
     {
       name: 'whisk-worker-image',
       script: './src/workers/ImageWorker.js',
       instances: 4,
+      env: {
+        NODE_ENV: 'production'
+      },
       error_file: './logs/worker-image-error.log',
       out_file: './logs/worker-image-out.log',
-      autorestart: true
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_memory_restart: '800M'
     }
   ]
 };
