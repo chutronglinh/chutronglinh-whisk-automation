@@ -16,7 +16,8 @@ module.exports = {
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Manual Login Worker (Auto-fill email/password)
@@ -35,7 +36,8 @@ module.exports = {
       error_file: './logs/worker-login-error.log',
       out_file: './logs/worker-login-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Simple Login Worker (100% Manual)
@@ -54,7 +56,8 @@ module.exports = {
       error_file: './logs/worker-simple-login-error.log',
       out_file: './logs/worker-simple-login-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Profile Worker
@@ -73,7 +76,8 @@ module.exports = {
       error_file: './logs/worker-profile-error.log',
       out_file: './logs/worker-profile-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Cookie Worker (Extract session cookies)
@@ -91,7 +95,8 @@ module.exports = {
       error_file: './logs/worker-cookie-error.log',
       out_file: './logs/worker-cookie-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Project Worker
@@ -108,7 +113,8 @@ module.exports = {
       error_file: './logs/worker-project-error.log',
       out_file: './logs/worker-project-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     },
 
     // Image Worker
@@ -125,7 +131,8 @@ module.exports = {
       error_file: './logs/worker-image-error.log',
       out_file: './logs/worker-image-out.log',
       merge_logs: true,
-      time: true
+      time: true,
+      max_memory_restart: '500M'
     }
   ]
 };
