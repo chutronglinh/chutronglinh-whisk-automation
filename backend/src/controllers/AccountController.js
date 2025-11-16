@@ -79,35 +79,22 @@ class AccountController {
   static async getStats(req, res) {
     try {
       const total = await Account.countDocuments();
-      const active = await Account.countDocuments({ status: 'active' });
-      const loginRequired = await Account.countDocuments({ status: 'login-required' });
-      const suspended = await Account.countDocuments({ status: 'suspended' });
+      const active = await Account.countDocuments({ status: 'ACTIVE' });
+      const synced = await Account.countDocuments({ status: 'SYNCED' });
+      const newAccounts = await Account.countDocuments({ status: 'NEW' });
       
       const withCookies = await Account.countDocuments({ 
-        'metadata.cookieStatus': 'active' 
+        sessionCookie: { $ne: null }
       });
-
-      const byCookieStatus = await Account.aggregate([
-        {
-          $group: {
-            _id: '$metadata.cookieStatus',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
 
       return res.json({
         success: true,
         data: {
           total,
           active,
-          loginRequired,
-          suspended,
-          withCookies,
-          byCookieStatus: byCookieStatus.reduce((acc, item) => {
-            acc[item._id || 'none'] = item.count;
-            return acc;
-          }, {})
+          synced,
+          new: newAccounts,
+          withCookies
         }
       });
     } catch (error) {
@@ -131,7 +118,6 @@ class AccountController {
         });
       }
 
-      // Check if account exists
       const existing = await Account.findOne({ email });
       if (existing) {
         return res.status(400).json({
@@ -145,10 +131,11 @@ class AccountController {
         password,
         recoveryEmail: recoveryEmail || '',
         twoFASecret: twoFASecret || '',
-        status: 'login-required',
+        status: 'NEW',
         source: 'manual',
         metadata: {
-          cookieStatus: 'none'
+          cookieStatus: 'none',
+          profileReady: false
         }
       });
 
@@ -186,7 +173,6 @@ class AccountController {
         });
       }
 
-      // Parse header to support multiple formats
       const header = lines[0].toLowerCase().trim();
       const accounts = [];
       const errors = [];
@@ -196,14 +182,11 @@ class AccountController {
         try {
           const values = lines[i].split(',').map(v => v.trim());
           
-          // Support multiple CSV formats
           let email, password, recoveryEmail, twoFASecret;
           
           if (header.includes('password')) {
-            // Format: email,password,recover_mail,twoFA
             [email, password, recoveryEmail, twoFASecret] = values;
           } else {
-            // Format: email,recoveryEmail,twoFASecret
             [email, recoveryEmail, twoFASecret] = values;
             password = null;
           }
@@ -213,7 +196,6 @@ class AccountController {
             continue;
           }
 
-          // Check if account already exists
           const existing = await Account.findOne({ email: email.trim() });
           if (existing) {
             skipped.push({ 
@@ -229,10 +211,11 @@ class AccountController {
             password: password || undefined,
             recoveryEmail: recoveryEmail || '',
             twoFASecret: twoFASecret || '',
-            status: 'login-required',
+            status: 'NEW',
             source: 'csv-import',
             metadata: {
-              cookieStatus: 'none'
+              cookieStatus: 'none',
+              profileReady: false
             }
           });
 
@@ -249,7 +232,6 @@ class AccountController {
         }
       }
 
-      // Clean up uploaded file
       fs.unlinkSync(req.file.path);
 
       return res.json({
@@ -267,7 +249,6 @@ class AccountController {
     } catch (error) {
       console.error('Import CSV error:', error);
       
-      // Clean up file on error
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
@@ -341,50 +322,7 @@ class AccountController {
     }
   }
 
-  // Start manual login (auto-fill credentials)
-  static async startManualLogin(req, res) {
-    try {
-      const account = await Account.findById(req.params.id);
-
-      if (!account) {
-        return res.status(404).json({
-          success: false,
-          error: 'Account not found'
-        });
-      }
-
-      if (!account.password) {
-        return res.status(400).json({
-          success: false,
-          error: 'Account password not set'
-        });
-      }
-
-      // Update account status to trigger worker pickup
-      await Account.findByIdAndUpdate(account._id, {
-        $set: { 
-          status: 'login-pending',
-          'metadata.loginRequested': new Date()
-        }
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          accountId: account._id,
-          message: 'Login request queued. Worker will process shortly.'
-        }
-      });
-    } catch (error) {
-      console.error('Start manual login error:', error);
-      return res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-  }
-
-  // Start simple login (100% manual)
+  // Start simple login
   static async startSimpleLogin(req, res) {
     try {
       const account = await Account.findById(req.params.id);
@@ -396,7 +334,6 @@ class AccountController {
         });
       }
 
-      // Update account status to trigger worker pickup
       await Account.findByIdAndUpdate(account._id, {
         $set: { 
           status: 'simple-login-pending',
@@ -408,7 +345,7 @@ class AccountController {
         success: true,
         data: {
           accountId: account._id,
-          message: 'Simple login request queued. Browser will open for manual login.'
+          message: 'Login request queued. Browser will open on server.'
         }
       });
     } catch (error) {
@@ -420,7 +357,7 @@ class AccountController {
     }
   }
 
-  // Extract cookie from logged-in profile
+  // Extract cookie
   static async extractCookie(req, res) {
     try {
       const account = await Account.findById(req.params.id);
@@ -432,14 +369,6 @@ class AccountController {
         });
       }
 
-      if (!account.metadata?.profileReady) {
-        return res.status(400).json({
-          success: false,
-          error: 'Profile not ready. Please login first.'
-        });
-      }
-
-      // Update account status to trigger worker pickup
       await Account.findByIdAndUpdate(account._id, {
         $set: { 
           'metadata.cookieExtractionRequested': new Date()

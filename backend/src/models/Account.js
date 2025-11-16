@@ -5,65 +5,67 @@ const accountSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    lowercase: true,
-    trim: true
+    trim: true,
+    lowercase: true
   },
-  password: String,
-  recoveryEmail: String,
-  twoFASecret: String,
-  phone: String,
-  sessionCookie: String,
-  cookies: [{
-    name: String,
-    value: String,
-    domain: String,
-    path: String,
-    expires: Number,
-    httpOnly: Boolean,
-    secure: Boolean
-  }],
+  password: {
+    type: String
+  },
+  recoveryEmail: {
+    type: String,
+    default: ''
+  },
+  twoFASecret: {
+    type: String,
+    default: ''
+  },
   status: {
     type: String,
-    enum: ['active', 'pending', 'login-required', 'processing', 'blocked', 'error'],
-    default: 'login-required'
+    enum: ['NEW', 'simple-login-pending', 'SYNCED', 'ACTIVE', 'suspended'],
+    default: 'NEW'
+  },
+  sessionCookie: {
+    type: String,
+    default: null
+  },
+  cookies: {
+    type: Array,
+    default: []
+  },
+  lastCookieUpdate: {
+    type: Date,
+    default: null
   },
   source: {
     type: String,
-    enum: ['manual', 'csv-import', 'api'],
+    enum: ['manual', 'csv-import'],
     default: 'manual'
   },
-  loginAttempts: {
-    type: Number,
-    default: 0
-  },
-  lastLogin: Date,
-  lastCookieUpdate: Date,
-  projects: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Project'
-  }],
   metadata: {
-    userAgent: String,
     profilePath: String,
-    profileReady: Boolean,
-    cookieExtracted: Boolean,
-    cookieValidated: Boolean,
+    profileReady: {
+      type: Boolean,
+      default: false
+    },
     cookieStatus: {
       type: String,
-      enum: ['active', 'extracting', 'failed', 'expired', 'none'],
+      enum: ['none', 'active', 'expired'],
       default: 'none'
     },
-    cookieError: String,
-    proxyUsed: String
+    loginStarted: Date,
+    loginCompleted: Date,
+    simpleLoginRequested: Date,
+    cookieExtractionRequested: Date,
+    lastError: String,
+    lastErrorTime: Date
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
-// Index cho queries
+// Indexes
+accountSchema.index({ email: 1 });
 accountSchema.index({ status: 1 });
-accountSchema.index({ source: 1 });
-accountSchema.index({ email: 1, status: 1 });
 accountSchema.index({ 'metadata.cookieStatus': 1 });
 
 const Account = mongoose.model('Account', accountSchema);

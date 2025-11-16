@@ -1,26 +1,7 @@
 import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
 import { connectDB } from '../config/database.js';
-import Bull from 'bull';
 import fs from 'fs';
-
-// Redis config
-const REDIS_CONFIG = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false
-};
-
-// Create queue
-const cookieQueue = new Bull('cookie-extraction', {
-  redis: REDIS_CONFIG,
-  defaultJobOptions: {
-    attempts: 1,
-    removeOnComplete: true,
-    removeOnFail: false
-  }
-});
 
 class CookieWorker {
   constructor() {
@@ -30,7 +11,7 @@ class CookieWorker {
   async init() {
     try {
       await connectDB();
-      console.log('[COOKIE WORKER] Started and ready');
+      console.log('[COOKIE WORKER] Started');
       console.log('[COOKIE WORKER] ✓ MongoDB connected');
 
       this.startProcessing();
@@ -41,22 +22,7 @@ class CookieWorker {
   }
 
   startProcessing() {
-    // Process jobs from queue
-    cookieQueue.process(async (job) => {
-      return this.extractCookie(job.data);
-    });
-
-    // Poll database for pending extractions
-    setInterval(() => this.pollPendingExtractions(), 10000);
-
-    // Queue event listeners
-    cookieQueue.on('completed', (job, result) => {
-      console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
-    });
-
-    cookieQueue.on('failed', (job, err) => {
-      console.error(`[COOKIE QUEUE] Job ${job.id} failed:`, err.message);
-    });
+    setInterval(() => this.pollPendingExtractions(), 5000);
   }
 
   async pollPendingExtractions() {
@@ -69,7 +35,7 @@ class CookieWorker {
       }).sort({ 'metadata.cookieExtractionRequested': 1 });
 
       if (pendingAccount) {
-        console.log('[COOKIE WORKER] Found pending extraction:', pendingAccount.email);
+        console.log('[COOKIE WORKER] Found pending:', pendingAccount.email);
         await this.extractCookie({
           accountId: pendingAccount._id.toString(),
           email: pendingAccount.email,
@@ -88,57 +54,50 @@ class CookieWorker {
     let browser = null;
 
     try {
-      console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
+      console.log(`[COOKIE EXTRACT] Starting for ${email}`);
 
       if (!profilePath || !fs.existsSync(profilePath)) {
         throw new Error('Profile not found. Please login first.');
       }
 
-      console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
-
-      // Launch browser with existing profile
       browser = await puppeteer.launch({
         headless: true,
         executablePath: '/usr/bin/google-chrome',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled'
+          '--disable-dev-shm-usage'
         ],
         userDataDir: profilePath
       });
 
       const page = await browser.newPage();
 
-      // Navigate to Whisk
       console.log('[COOKIE EXTRACT] Navigating to Whisk...');
-      await page.goto('https://labs.google.com/search/whisk', {
+      await page.goto('https://labs.google/fx/tools/whisk', {
         waitUntil: 'networkidle2',
         timeout: 30000
       });
 
       await page.waitForTimeout(2000);
 
-      // Extract cookies
       const cookies = await page.cookies();
       console.log(`[COOKIE EXTRACT] Extracted ${cookies.length} cookies`);
 
-      // Find session cookie
       const sessionCookie = cookies.find(c => 
         c.name === '__Secure-1PSID' || 
         c.name === '__Secure-3PSID'
       );
 
       if (!sessionCookie) {
-        throw new Error('Session cookie not found. Please login first.');
+        throw new Error('Session cookie not found. Please login again.');
       }
 
-      console.log(`[COOKIE EXTRACT] ✓ Found session cookie for ${email}`);
+      console.log(`[COOKIE EXTRACT] ✓ Found session cookie`);
 
-      // Save to database
       await Account.findByIdAndUpdate(accountId, {
         $set: {
+          status: 'ACTIVE',
           sessionCookie: sessionCookie.value,
           cookies: cookies,
           lastCookieUpdate: new Date(),
@@ -147,7 +106,7 @@ class CookieWorker {
         }
       });
 
-      console.log(`[COOKIE EXTRACT] ✓ Cookies saved to database for ${email}`);
+      console.log(`[COOKIE EXTRACT] ✓ Saved for ${email}`);
 
       return {
         success: true,
@@ -177,7 +136,6 @@ class CookieWorker {
   }
 }
 
-// Start worker
 const worker = new CookieWorker();
 worker.init();
 
