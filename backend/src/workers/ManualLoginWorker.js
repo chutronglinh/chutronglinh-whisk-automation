@@ -17,8 +17,10 @@ loginQueue.process('manual-login', async (job) => {
   let browser = null;
   
   try {
-    // Create profile directory
-    const profileDir = path.join(process.cwd(), 'chrome-profiles', accountId);
+    // Create profile directory - FIX: Use env variable
+    const profilePath = process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles';
+    const profileDir = path.join(profilePath, accountId);
+    
     if (!fs.existsSync(profileDir)) {
       fs.mkdirSync(profileDir, { recursive: true });
     }
@@ -135,6 +137,7 @@ loginQueue.process('manual-login', async (job) => {
       success: true,
       email,
       cookiesCount: cookies.length,
+      profilePath: profileDir,
       message: 'Login successful, cookies extracted'
     };
 
