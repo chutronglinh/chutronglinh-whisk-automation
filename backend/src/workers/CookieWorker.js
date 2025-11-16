@@ -1,6 +1,14 @@
 import { cookieQueue } from '../services/QueueService.js';
 import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
+import mongoose from 'mongoose';
+
+// Connect to MongoDB
+if (mongoose.connection.readyState === 0) {
+  mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/whisk-automation')
+    .then(() => console.log('[COOKIE WORKER] ✓ MongoDB connected'))
+    .catch(err => console.error('[COOKIE WORKER] ✗ MongoDB error:', err));
+}
 
 console.log('[COOKIE WORKER] Started and ready to extract cookies');
 
@@ -145,7 +153,7 @@ const processCookieExtraction = async (job) => {
   }
 };
 
-// Process queue with Bull syntax - IMPORTANT: Add job type
+// Process queue with Bull syntax
 cookieQueue.process('extract-cookie', 2, processCookieExtraction);
 
 cookieQueue.on('completed', (job, result) => {
