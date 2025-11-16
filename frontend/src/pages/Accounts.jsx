@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Upload, Download, Trash2, User, Plus, RefreshCw, Key } from 'lucide-react';
+import { Upload, Download, Trash2, User, Plus, RefreshCw, Key, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
@@ -21,6 +21,13 @@ export default function Accounts() {
   useEffect(() => {
     loadAccounts();
     loadStats();
+    
+    // Auto refresh mỗi 10 giây
+    const interval = setInterval(() => {
+      loadAccounts();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadAccounts = async () => {
@@ -112,7 +119,7 @@ export default function Accounts() {
     }
   };
 
-  // Extract cookie - MỚI
+  // Extract cookie - LUÔN CHO PHÉP
   const handleExtractCookie = async (accountId) => {
     try {
       const res = await axios.post(`${API_BASE}/accounts/${accountId}/extract-cookie`);
@@ -165,6 +172,49 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
+  const getCookieStatusBadge = (acc) => {
+    const cookieStatus = acc.metadata?.cookieStatus || 'none';
+    
+    const badges = {
+      'active': <span className="text-xs text-green-600 flex items-center gap-1">✓ Active</span>,
+      'extracting': <span className="text-xs text-blue-600 flex items-center gap-1">⏳ Extracting...</span>,
+      'failed': <span className="text-xs text-red-600 flex items-center gap-1" title={acc.metadata?.cookieError}>✗ Failed</span>,
+      'expired': <span className="text-xs text-orange-600 flex items-center gap-1">⚠ Expired</span>,
+      'none': <span className="text-xs text-gray-400">➖ No Cookie</span>
+    };
+    
+    return badges[cookieStatus] || badges['none'];
+  };
+
+  const formatTimeAgo = (date) => {
+    if (!date) return '-';
+    
+    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d ago`;
+    return new Date(date).toLocaleDateString();
+  };
+
+  const getCookieButtonText = (acc) => {
+    if (acc.metadata?.cookieStatus === 'extracting') return 'Extracting...';
+    if (acc.sessionCookie) return 'Refresh';
+    return 'Get Cookie';
+  };
+
+  const getCookieButtonTitle = (acc) => {
+    if (acc.metadata?.cookieStatus === 'extracting') return 'Extracting cookie...';
+    if (acc.sessionCookie) {
+      const lastUpdate = acc.lastCookieUpdate 
+        ? new Date(acc.lastCookieUpdate).toLocaleString() 
+        : 'Unknown';
+      return `Last updated: ${lastUpdate}. Click to refresh.`;
+    }
+    return 'Extract session cookie from Whisk';
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -172,7 +222,7 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
           <h1 className="text-3xl font-bold">Accounts</h1>
           <p className="text-gray-600 mt-1">
             Total: {stats.total || 0} | Active: {stats.byStatus?.active || 0} | 
-            Pending: {stats.byStatus?.pending || 0}
+            Cookies: {stats.byCookieStatus?.active || 0} active
           </p>
         </div>
         
@@ -285,13 +335,16 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Cookie Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Last Cookie Update
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 2FA
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Source
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Last Login
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Actions
@@ -307,16 +360,37 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
                     {acc.status}
                   </span>
                 </td>
+                <td className="px-6 py-4">
+                  {getCookieStatusBadge(acc)}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {formatTimeAgo(acc.lastCookieUpdate)}
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-sm">
-                  {acc.twoFASecret ? '✓ Yes' : '- No'}
+                  {acc.twoFASecret ? '✓ Yes' : '-'}
                 </td>
                 <td className="px-6 py-4 text-sm">{acc.source}</td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  {acc.lastLogin ? new Date(acc.lastLogin).toLocaleString() : '-'}
-                </td>
                 <td className="px-6 py-4">
-                  <div className="flex gap-2">
-                    {/* Login button - for login-required and error status */}
+                  <div className="flex gap-2 items-center">
+                    {/* LUÔN HIỂN THỊ GET COOKIE */}
+                    <button 
+                      onClick={() => handleExtractCookie(acc._id)}
+                      className={`flex items-center gap-1 ${
+                        acc.metadata?.cookieStatus === 'extracting'
+                          ? 'text-gray-400 cursor-not-allowed' 
+                          : 'text-purple-600 hover:text-purple-800'
+                      }`}
+                      disabled={acc.metadata?.cookieStatus === 'extracting'}
+                      title={getCookieButtonTitle(acc)}
+                    >
+                      <Key className="w-4 h-4" />
+                      <span className="text-xs">{getCookieButtonText(acc)}</span>
+                    </button>
+                    
+                    {/* Login button - chỉ hiện khi chưa login */}
                     {(acc.status === 'login-required' || acc.status === 'error') && (
                       <button 
                         onClick={() => handleSimpleLogin(acc._id)}
@@ -324,19 +398,7 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
                         title="Manual Login"
                       >
                         <User className="w-4 h-4" />
-                        Login
-                      </button>
-                    )}
-                    
-                    {/* Get Cookie button - only show if profile is ready */}
-                    {acc.status === 'pending' && acc.metadata?.profileReady && (
-                      <button 
-                        onClick={() => handleExtractCookie(acc._id)}
-                        className="text-purple-600 hover:text-purple-800 flex items-center gap-1"
-                        title="Extract Session Cookie"
-                      >
-                        <Key className="w-4 h-4" />
-                        Get Cookie
+                        <span className="text-xs">Login</span>
                       </button>
                     )}
                     

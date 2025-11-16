@@ -7,11 +7,12 @@ class AccountController {
   // Get all accounts
   async getAll(req, res) {
     try {
-      const { status, source, page = 1, limit = 50 } = req.query;
+      const { status, source, cookieStatus, page = 1, limit = 50 } = req.query;
       
       const query = {};
       if (status) query.status = status;
       if (source) query.source = source;
+      if (cookieStatus) query['metadata.cookieStatus'] = cookieStatus;
 
       const accounts = await Account.find(query)
         .select('-password')
@@ -84,13 +85,16 @@ class AccountController {
         twoFASecret,
         phone,
         source: 'manual',
-        status: 'login-required'
+        status: 'login-required',
+        metadata: {
+          cookieStatus: 'none'
+        }
       });
 
       res.json({ 
         success: true, 
         data: account,
-        message: 'Account created. Please login manually to activate.'
+        message: 'Account created. Click "Get Cookie" to extract session.'
       });
     } catch (error) {
       res.status(500).json({ 
@@ -128,7 +132,10 @@ class AccountController {
             recoveryEmail: row.recover_mail || '',
             twoFASecret: row.twoFA || '',
             status: 'login-required',
-            source: 'csv-import'
+            source: 'csv-import',
+            metadata: {
+              cookieStatus: 'none'
+            }
           });
         })
         .on('end', async () => {
@@ -258,7 +265,7 @@ class AccountController {
     }
   }
 
-  // Extract cookie from logged-in profile
+  // Extract cookie - ĐƠN GIẢN HÓA, BỎ VALIDATION
   async extractCookie(req, res) {
     try {
       const { id } = req.params;
@@ -271,17 +278,11 @@ class AccountController {
         });
       }
 
-      if (!account.metadata?.profilePath) {
+      // Chỉ check đang extract hay không
+      if (account.metadata?.cookieStatus === 'extracting') {
         return res.status(400).json({ 
           success: false, 
-          error: 'Profile path not found. Please login first.' 
-        });
-      }
-
-      if (!account.metadata?.profileReady) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Profile not ready. Please login first.' 
+          error: 'Cookie extraction already in progress' 
         });
       }
 
@@ -289,7 +290,10 @@ class AccountController {
         accountId: account._id.toString()
       });
 
+      // Update status
       account.status = 'processing';
+      account.metadata = account.metadata || {};
+      account.metadata.cookieStatus = 'extracting';
       await account.save();
 
       res.json({
@@ -376,7 +380,8 @@ class AccountController {
       const result = {
         total: await Account.countDocuments(),
         byStatus: {},
-        bySource: {}
+        bySource: {},
+        byCookieStatus: {}
       };
 
       stats.forEach(stat => {
@@ -394,6 +399,19 @@ class AccountController {
 
       sourceStats.forEach(stat => {
         result.bySource[stat._id] = stat.count;
+      });
+
+      const cookieStats = await Account.aggregate([
+        {
+          $group: {
+            _id: '$metadata.cookieStatus',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      cookieStats.forEach(stat => {
+        result.byCookieStatus[stat._id || 'none'] = stat.count;
       });
 
       res.json({ success: true, data: result });

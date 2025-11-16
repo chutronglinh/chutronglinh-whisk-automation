@@ -48,6 +48,12 @@ const accountSchema = new mongoose.Schema({
     profileReady: Boolean,
     cookieExtracted: Boolean,
     cookieValidated: Boolean,
+    cookieStatus: {
+      type: String,
+      enum: ['active', 'extracting', 'failed', 'expired', 'none'],
+      default: 'none'
+    },
+    cookieError: String,
     proxyUsed: String
   }
 }, { 
@@ -58,6 +64,7 @@ const accountSchema = new mongoose.Schema({
 accountSchema.index({ status: 1 });
 accountSchema.index({ source: 1 });
 accountSchema.index({ email: 1, status: 1 });
+accountSchema.index({ 'metadata.cookieStatus': 1 });
 
 const Account = mongoose.model('Account', accountSchema);
 

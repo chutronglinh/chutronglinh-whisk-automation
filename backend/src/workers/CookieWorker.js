@@ -1,112 +1,95 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { cookieQueue } from '../services/QueueService.js';
+import { Worker } from 'bullmq';
+import { cookieQueue, connection } from '../services/QueueService.js';
+import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
-import { getAccessToken } from '../utils/auth-helper.js';
-import { connectDB } from '../config/database.js';
 
-puppeteer.use(StealthPlugin());
+console.log('[COOKIE WORKER] Started and ready to extract cookies');
 
-const WHISK_URL = 'https://labs.google/fx/tools/whisk';
-const COOKIE_NAME = '__Secure-next-auth.session-token';
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const worker = new Worker(
+  'cookie-extraction',
+  async (job) => {
+    const { accountId } = job.data;
+    
+    console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
 
-// Connect to MongoDB before processing jobs
-let dbConnected = false;
-
-(async () => {
-  try {
-    await connectDB();
-    dbConnected = true;
-    console.log('[COOKIE WORKER] ✓ MongoDB connected successfully');
-  } catch (err) {
-    console.error('[COOKIE WORKER] ✗ MongoDB connection failed:', err);
-    process.exit(1);
-  }
-})();
-
-cookieQueue.process('extract-cookie', async (job) => {
-  const { accountId } = job.data;
-
-  // Wait for DB connection
-  if (!dbConnected) {
-    console.log('[COOKIE EXTRACT] Waiting for MongoDB connection...');
-    await new Promise(resolve => {
-      const checkInterval = setInterval(() => {
-        if (dbConnected) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-    });
-  }
-
-  console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
-
-  try {
-    const account = await Account.findById(accountId);
-    if (!account) throw new Error('Account not found');
-
-    const profilePath = account.metadata?.profilePath;
-    if (!profilePath) {
-      throw new Error('Profile path not found. Please login first.');
-    }
-
-    console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
-
-    // Launch headless browser with existing profile
-    const browser = await puppeteer.launch({
-      userDataDir: profilePath,
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
-
+    let browser;
     try {
-      const page = await browser.newPage();
+      const account = await Account.findById(accountId);
+      if (!account) {
+        throw new Error('Account not found');
+      }
 
-      console.log(`[COOKIE EXTRACT] Navigating to Whisk...`);
+      const profilePath = account.metadata?.profilePath;
+      if (!profilePath) {
+        throw new Error('Profile path not found');
+      }
 
-      // Navigate to Whisk
-      await page.goto(WHISK_URL, {
-        waitUntil: 'networkidle2',
-        timeout: 30000
+      console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
+
+      // Launch browser với profile
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath: '/usr/bin/google-chrome',
+        userDataDir: profilePath,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote'
+        ]
       });
 
-      // Wait for page to fully load
-      await delay(3000);
+      const page = await browser.newPage();
+
+      // Navigate to Whisk
+      console.log(`[COOKIE EXTRACT] Navigating to Whisk...`);
+      await page.goto('https://whisk.google.com', { 
+        waitUntil: 'networkidle2',
+        timeout: 30000 
+      });
+
+      // Wait để page load
+      await page.waitForTimeout(3000);
 
       // Extract cookies
       const cookies = await page.cookies();
-      const sessionCookie = cookies.find(c => c.name === COOKIE_NAME);
+      const sessionCookie = cookies.find(c => 
+        c.name === '__Secure-1PSID' || 
+        c.name === 'SID' ||
+        c.name.includes('session')
+      );
 
       if (!sessionCookie) {
-        throw new Error('Session cookie not found. Profile may not be logged in to Whisk.');
+        throw new Error('Session cookie not found. Please login first.');
       }
 
-      console.log(`[COOKIE EXTRACT] Cookie found: ${sessionCookie.value.substring(0, 30)}...`);
+      console.log(`[COOKIE EXTRACT] Cookie found: ${sessionCookie.value.substring(0, 50)}...`);
 
       // Validate cookie
       console.log(`[COOKIE EXTRACT] Validating cookie...`);
-      const validation = await getAccessToken(sessionCookie.value);
-      
-      if (!validation.valid) {
-        throw new Error(`Cookie validation failed: ${validation.error}`);
+      const response = await page.goto('https://whisk.google.com/api/user', {
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      });
+
+      if (!response || response.status() !== 200) {
+        throw new Error('Cookie validation failed. May be expired.');
       }
 
+      const userData = await response.json();
       console.log(`[COOKIE EXTRACT] Cookie validated successfully`);
-      console.log(`[COOKIE EXTRACT] User: ${validation.userInfo?.email || 'N/A'}`);
+      console.log(`[COOKIE EXTRACT] User: ${userData.email || account.email}`);
 
-      // Update account with retry logic
-      let updateSuccess = false;
+      await browser.close();
+
+      // Update database với retry
       let retryCount = 0;
       const maxRetries = 3;
+      let updateSuccess = false;
 
-      while (!updateSuccess && retryCount < maxRetries) {
+      while (retryCount < maxRetries && !updateSuccess) {
         try {
           await Account.findByIdAndUpdate(accountId, {
             sessionCookie: sessionCookie.value,
@@ -114,18 +97,19 @@ cookieQueue.process('extract-cookie', async (job) => {
             status: 'active',
             lastCookieUpdate: new Date(),
             'metadata.cookieExtracted': true,
-            'metadata.cookieValidated': true
+            'metadata.cookieValidated': true,
+            'metadata.cookieStatus': 'active',
+            'metadata.cookieError': null
           });
           updateSuccess = true;
           console.log(`[COOKIE EXTRACT] Database updated`);
         } catch (dbError) {
           retryCount++;
-          console.error(`[COOKIE EXTRACT] Database update failed (attempt ${retryCount}):`, dbError.message);
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          } else {
-            throw new Error(`Failed to update database after ${maxRetries} attempts: ${dbError.message}`);
+          if (retryCount >= maxRetries) {
+            throw new Error(`Database update failed after ${maxRetries} retries: ${dbError.message}`);
           }
+          console.log(`[COOKIE EXTRACT] Database update retry ${retryCount}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
         }
       }
 
@@ -138,26 +122,39 @@ cookieQueue.process('extract-cookie', async (job) => {
         validated: true
       };
 
-    } finally {
-      await browser.close();
+    } catch (error) {
+      console.error(`[COOKIE EXTRACT] Error:`, error.message);
+
+      if (browser) {
+        await browser.close();
+      }
+
+      // Update database với error status
+      try {
+        await Account.findByIdAndUpdate(accountId, {
+          status: 'error',
+          'metadata.cookieStatus': 'failed',
+          'metadata.cookieError': error.message
+        });
+      } catch (dbError) {
+        console.error(`[COOKIE EXTRACT] Failed to update error status:`, dbError.message);
+      }
+
+      throw error;
     }
-
-  } catch (error) {
-    console.error(`[COOKIE EXTRACT] Error:`, error.message);
-
-    // Update account status
-    try {
-      await Account.findByIdAndUpdate(accountId, {
-        status: 'error'
-      });
-    } catch (dbError) {
-      console.error(`[COOKIE EXTRACT] Failed to update error status:`, dbError.message);
-    }
-
-    throw error;
+  },
+  {
+    connection,
+    concurrency: 2
   }
+);
+
+worker.on('completed', (job, result) => {
+  console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
 });
 
-console.log('[COOKIE WORKER] Started and ready to extract cookies');
+worker.on('failed', (job, error) => {
+  console.error(`[COOKIE QUEUE] Job ${job.id} failed:`, error.message);
+});
 
-export default cookieQueue;
+export default worker;
