@@ -3,6 +3,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { cookieQueue } from '../services/QueueService.js';
 import Account from '../models/Account.js';
 import { getAccessToken } from '../utils/auth-helper.js';
+import { connectDB } from '../config/database.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -10,8 +11,35 @@ const WHISK_URL = 'https://labs.google/fx/tools/whisk';
 const COOKIE_NAME = '__Secure-next-auth.session-token';
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Connect to MongoDB before processing jobs
+let dbConnected = false;
+
+(async () => {
+  try {
+    await connectDB();
+    dbConnected = true;
+    console.log('[COOKIE WORKER] ✓ MongoDB connected successfully');
+  } catch (err) {
+    console.error('[COOKIE WORKER] ✗ MongoDB connection failed:', err);
+    process.exit(1);
+  }
+})();
+
 cookieQueue.process('extract-cookie', async (job) => {
   const { accountId } = job.data;
+
+  // Wait for DB connection
+  if (!dbConnected) {
+    console.log('[COOKIE EXTRACT] Waiting for MongoDB connection...');
+    await new Promise(resolve => {
+      const checkInterval = setInterval(() => {
+        if (dbConnected) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
 
   console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
 
@@ -96,7 +124,7 @@ cookieQueue.process('extract-cookie', async (job) => {
           if (retryCount < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
-            throw new Error(`Failed to update database after ${maxRetries} attempts`);
+            throw new Error(`Failed to update database after ${maxRetries} attempts: ${dbError.message}`);
           }
         }
       }

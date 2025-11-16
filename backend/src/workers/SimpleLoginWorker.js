@@ -4,12 +4,40 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import Account from '../models/Account.js';
 import path from 'path';
 import fs from 'fs';
+import { connectDB } from '../config/database.js';
 
 puppeteer.use(StealthPlugin());
+
+// Connect to MongoDB before processing jobs
+let dbConnected = false;
+
+(async () => {
+  try {
+    await connectDB();
+    dbConnected = true;
+    console.log('[SIMPLE LOGIN WORKER] ✓ MongoDB connected successfully');
+  } catch (err) {
+    console.error('[SIMPLE LOGIN WORKER] ✗ MongoDB connection failed:', err);
+    process.exit(1);
+  }
+})();
 
 // Process simple manual login - user does everything
 loginQueue.process('simple-manual-login', async (job) => {
   const { accountId, email } = job.data;
+  
+  // Wait for DB connection
+  if (!dbConnected) {
+    console.log('[SIMPLE LOGIN] Waiting for MongoDB connection...');
+    await new Promise(resolve => {
+      const checkInterval = setInterval(() => {
+        if (dbConnected) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
   
   console.log(`[SIMPLE LOGIN] Opening browser for ${email} - User will login manually`);
   
@@ -89,12 +117,12 @@ loginQueue.process('simple-manual-login', async (job) => {
     while (!updateSuccess && retryCount < maxRetries) {
       try {
         await Account.findByIdAndUpdate(accountId, {
-          status: 'pending', // Not active yet - need to extract cookie
+          status: 'pending',
           lastLogin: new Date(),
           loginAttempts: 0,
           'metadata.userAgent': await page.evaluate(() => navigator.userAgent),
           'metadata.profilePath': profileDir,
-          'metadata.profileReady': true // Profile is ready for cookie extraction
+          'metadata.profileReady': true
         });
         updateSuccess = true;
         console.log(`[SIMPLE LOGIN] Database updated for ${email}`);
@@ -104,7 +132,7 @@ loginQueue.process('simple-manual-login', async (job) => {
         if (retryCount < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         } else {
-          throw new Error(`Failed to update database after ${maxRetries} attempts`);
+          throw new Error(`Failed to update database after ${maxRetries} attempts: ${dbError.message}`);
         }
       }
     }

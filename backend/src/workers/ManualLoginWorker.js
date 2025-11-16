@@ -5,19 +5,47 @@ import Account from '../models/Account.js';
 import path from 'path';
 import fs from 'fs';
 import speakeasy from 'speakeasy';
+import { connectDB } from '../config/database.js';
 
 puppeteer.use(StealthPlugin());
+
+// Connect to MongoDB before processing jobs
+let dbConnected = false;
+
+(async () => {
+  try {
+    await connectDB();
+    dbConnected = true;
+    console.log('[MANUAL LOGIN WORKER] ✓ MongoDB connected successfully');
+  } catch (err) {
+    console.error('[MANUAL LOGIN WORKER] ✗ MongoDB connection failed:', err);
+    process.exit(1);
+  }
+})();
 
 // Process manual login jobs
 loginQueue.process('manual-login', async (job) => {
   const { accountId, email, password, twoFASecret } = job.data;
+  
+  // Wait for DB connection
+  if (!dbConnected) {
+    console.log('[MANUAL LOGIN] Waiting for MongoDB connection...');
+    await new Promise(resolve => {
+      const checkInterval = setInterval(() => {
+        if (dbConnected) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
   
   console.log(`[MANUAL LOGIN] Starting for ${email}`);
   
   let browser = null;
   
   try {
-    // Create profile directory - FIX: Use env variable
+    // Create profile directory
     const profilePath = process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles';
     const profileDir = path.join(profilePath, accountId);
     
@@ -27,7 +55,7 @@ loginQueue.process('manual-login', async (job) => {
 
     // Launch Chrome with visible UI
     browser = await puppeteer.launch({
-      headless: false, // Show browser
+      headless: false,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
