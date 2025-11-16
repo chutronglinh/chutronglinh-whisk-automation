@@ -127,6 +127,65 @@ cd /opt/whisk-automation
 
 ## 🔧 Troubleshooting
 
+## 🔧 Common Permission Issues
+
+### Issue: "Permission denied" when running scripts
+
+**Solution:**
+```bash
+cd /opt/whisk-automation
+bash deployment/fix-permissions.sh
+```
+
+### Issue: "EACCES: permission denied" during build
+
+**Solution:**
+```bash
+# Quick fix
+sudo rm -rf frontend/dist
+bash deployment/deploy.sh
+
+# Permanent fix
+bash deployment/fix-permissions.sh
+```
+
+### Issue: Git detects file permission changes
+
+**Solution:**
+```bash
+cd /opt/whisk-automation
+git config core.filemode false
+```
+
+### Issue: Files owned by root after git pull
+
+**Cause:** Running `sudo git pull` creates root-owned files
+
+**Solution:**
+```bash
+# Fix ownership
+sudo chown -R $USER:$USER /opt/whisk-automation
+
+# Always pull without sudo
+git pull origin main  # ✅ Correct
+sudo git pull origin main  # ❌ Wrong
+```
+
+### Automated Fix Script
+
+Run this anytime you encounter permission issues:
+```bash
+cd /opt/whisk-automation
+bash deployment/fix-permissions.sh
+```
+
+This script will:
+- Fix all file ownership
+- Configure Git properly
+- Make scripts executable
+- Set up data directories
+- Clean up problematic files
+
 ### PM2 Processes Not Starting
 ```bash
 # Check logs

@@ -1,8 +1,8 @@
 #!/bin/bash
-# Whisk Automation - Complete Server Setup
+# Whisk Automation - Complete Server Setup (UPDATED v2.0)
 # Run on fresh Ubuntu 24.04 server
 
-set -e  # Exit on error
+set -e
 
 echo "=================================="
 echo "🚀 Whisk Automation - Server Setup"
@@ -13,7 +13,7 @@ echo ""
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then 
@@ -92,6 +92,13 @@ else
     cd /opt/whisk-automation
     git pull origin main
 fi
+
+# Configure Git to avoid permission issues
+echo "Configuring Git..."
+git config core.filemode false
+git config --global --add safe.directory /opt/whisk-automation
+sudo chown -R $USER:$USER /opt/whisk-automation
+
 echo -e "${GREEN}✓ Project directory ready${NC}"
 echo ""
 
@@ -164,6 +171,9 @@ sudo systemctl enable redis-server
 # Mark setup as complete
 touch /opt/whisk-automation/.setup-complete
 
+# Final permission fix
+sudo chown -R $USER:$USER /opt/whisk-automation
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✅ SETUP COMPLETE!${NC}"
@@ -180,7 +190,10 @@ echo "   pm2 restart all       - Restart all workers"
 echo ""
 echo "🔄 Update code:"
 echo "   cd /opt/whisk-automation"
-echo "   ./deployment/deploy.sh"
+echo "   bash deployment/deploy.sh"
+echo ""
+echo "🔧 Fix permissions issues:"
+echo "   bash deployment/fix-permissions.sh"
 echo ""
 echo "📖 Full documentation: deployment/README.md"
 echo ""
