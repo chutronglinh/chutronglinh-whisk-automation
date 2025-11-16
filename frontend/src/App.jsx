@@ -1,52 +1,108 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import { LayoutDashboard, Users, Zap } from 'lucide-react';
-import Dashboard from './pages/Dashboard';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import Accounts from './pages/Accounts';
+import Prompts from './pages/Prompts';
+import Projects from './pages/Projects';
 import Generate from './pages/Generate';
+import Gallery from './pages/Gallery';
 
-export default function App() {
+function Navigation() {
+  const location = useLocation();
+  
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
   return (
-    <BrowserRouter>
-      <div className="flex h-screen bg-gray-100">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
+    <nav className="bg-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          <div className="flex items-center space-x-8">
+            <Link to="/" className="text-xl font-bold">
+              🎨 Whisk Auto
+            </Link>
+            
+            <div className="flex space-x-4">
+              <Link
+                to="/accounts"
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActive('/accounts') 
+                    ? 'bg-blue-600' 
+                    : 'hover:bg-gray-800'
+                }`}
+              >
+                👤 Accounts
+              </Link>
+              
+              <Link
+                to="/prompts"
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActive('/prompts') 
+                    ? 'bg-blue-600' 
+                    : 'hover:bg-gray-800'
+                }`}
+              >
+                📝 Prompts
+              </Link>
+              
+              <Link
+                to="/projects"
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActive('/projects') 
+                    ? 'bg-blue-600' 
+                    : 'hover:bg-gray-800'
+                }`}
+              >
+                📁 Projects
+              </Link>
+              
+              <Link
+                to="/generate"
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActive('/generate') 
+                    ? 'bg-blue-600' 
+                    : 'hover:bg-gray-800'
+                }`}
+              >
+                ⚡ Generate
+              </Link>
+              
+              <Link
+                to="/gallery"
+                className={`px-3 py-2 rounded-lg transition ${
+                  isActive('/gallery') 
+                    ? 'bg-blue-600' 
+                    : 'hover:bg-gray-800'
+                }`}
+              >
+                🖼️ Gallery
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        
+        <main className="max-w-7xl mx-auto px-4 py-8">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Accounts />} />
             <Route path="/accounts" element={<Accounts />} />
+            <Route path="/prompts" element={<Prompts />} />
+            <Route path="/projects" element={<Projects />} />
             <Route path="/generate" element={<Generate />} />
+            <Route path="/gallery" element={<Gallery />} />
           </Routes>
         </main>
       </div>
-      <Toaster position="top-right" />
-    </BrowserRouter>
+    </Router>
   );
 }
 
-function Sidebar() {
-  const nav = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/accounts', icon: Users, label: 'Accounts' },
-    { path: '/generate', icon: Zap, label: 'Generate' }
-  ];
-
-  return (
-    <div className="w-64 bg-gray-900 text-white">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold">Whisk Auto</h1>
-      </div>
-      <nav className="mt-6">
-        {nav.map(item => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className="flex items-center px-6 py-3 hover:bg-gray-800 transition"
-          >
-            <item.icon className="w-5 h-5 mr-3" />
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
-  );
-}
+export default App;
