@@ -3,7 +3,7 @@ module.exports = {
     // API Server
     {
       name: 'whisk-api',
-      script: './src/server.js',
+      script: './src/app.js',
       instances: 2,
       exec_mode: 'cluster',
       env: {
