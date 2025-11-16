@@ -1,431 +1,385 @@
-import { useEffect, useState } from 'react';
-import { Upload, Download, Trash2, User, Plus, RefreshCw, Key, Clock } from 'lucide-react';
-import toast from 'react-hot-toast';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
+import { 
+  UserIcon, 
+  ArrowPathIcon, 
+  TrashIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon
+} from '@heroicons/react/24/outline';
 
-const API_BASE = 'http://192.168.163.149/api';
+const API_BASE = '/api';
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
-  const [stats, setStats] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    recoveryEmail: '',
-    twoFASecret: '',
-    phone: ''
+  const [loading, setLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    cookies: 0
   });
 
   useEffect(() => {
-    loadAccounts();
-    loadStats();
-    
-    // Auto refresh mỗi 10 giây
-    const interval = setInterval(() => {
-      loadAccounts();
-    }, 10000);
-    
-    return () => clearInterval(interval);
+    fetchAccounts();
+    fetchStats();
   }, []);
 
-  const loadAccounts = async () => {
+  const fetchAccounts = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/accounts`);
-      setAccounts(res.data.data);
+      const response = await fetch(`${API_BASE}/accounts`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setAccounts(data.data);
+      }
     } catch (error) {
-      toast.error('Failed to load accounts');
-      console.error(error);
+      console.error('Failed to fetch accounts:', error);
+      alert('Failed to fetch accounts: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStats = async () => {
+  const fetchStats = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/accounts/stats`);
-      setStats(res.data.data);
+      const response = await fetch(`${API_BASE}/accounts/stats`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setStats({
+          total: data.data.total,
+          active: data.data.active,
+          cookies: data.data.withCookies
+        });
+      }
     } catch (error) {
-      console.error('Failed to load stats:', error);
+      console.error('Failed to fetch stats:', error);
     }
   };
 
-  const handleCSVImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+  const handleImportCSV = async (file) => {
     try {
-      const res = await axios.post(`${API_BASE}/accounts/import-csv`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      setIsImporting(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_BASE}/accounts/import`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        let message = `✅ Import Successful!\n\n`;
+        message += `Imported: ${data.data.imported}\n`;
+        message += `Skipped: ${data.data.skipped}\n`;
+        message += `Errors: ${data.data.errors}\n`;
+        
+        if (data.data.skippedDetails && data.data.skippedDetails.length > 0) {
+          message += `\nSkipped accounts:\n`;
+          data.data.skippedDetails.slice(0, 5).forEach(item => {
+            message += `- ${item.email || 'Line ' + item.line}: ${item.reason}\n`;
+          });
+          if (data.data.skippedDetails.length > 5) {
+            message += `... and ${data.data.skippedDetails.length - 5} more\n`;
+          }
+        }
+
+        alert(message);
+        fetchAccounts();
+        fetchStats();
+      } else {
+        throw new Error(data.error || 'Import failed');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('❌ Import failed: ' + error.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        alert('Please select a CSV file');
+        return;
+      }
+      handleImportCSV(file);
+    }
+    event.target.value = '';
+  };
+
+  const handleSimpleLogin = async (accountId) => {
+    try {
+      const response = await fetch(`${API_BASE}/accounts/${accountId}/simple-login`, {
+        method: 'POST'
       });
       
-      toast.success(res.data.message || `Imported ${res.data.imported} accounts`);
+      const data = await response.json();
       
-      if (res.data.errors && res.data.errors.length > 0) {
-        console.warn('Import errors:', res.data.errors);
+      if (data.success) {
+        alert('✅ ' + data.data.message);
+        fetchAccounts();
+      } else {
+        throw new Error(data.error);
       }
-      
-      loadAccounts();
-      loadStats();
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to import CSV');
+      console.error('Simple login error:', error);
+      alert('❌ Failed to start login: ' + error.message);
     }
-    
-    e.target.value = '';
   };
 
-  const handleAddManual = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.email || !formData.password) {
-      toast.error('Email and password are required');
+  const handleExtractCookie = async (accountId) => {
+    try {
+      const response = await fetch(`${API_BASE}/accounts/${accountId}/extract-cookie`, {
+        method: 'POST'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('✅ ' + data.data.message);
+        fetchAccounts();
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Extract cookie error:', error);
+      alert('❌ Failed to extract cookie: ' + error.message);
+    }
+  };
+
+  const handleDelete = async (accountId) => {
+    if (!confirm('Are you sure you want to delete this account?')) {
       return;
     }
 
     try {
-      const res = await axios.post(`${API_BASE}/accounts`, formData);
-      toast.success(res.data.message || 'Account added successfully');
-      setShowAddForm(false);
-      setFormData({
-        email: '',
-        password: '',
-        recoveryEmail: '',
-        twoFASecret: '',
-        phone: ''
+      const response = await fetch(`${API_BASE}/accounts/${accountId}`, {
+        method: 'DELETE'
       });
-      loadAccounts();
-      loadStats();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to add account');
-    }
-  };
-
-  // Simple login - 100% thủ công
-  const handleSimpleLogin = async (accountId) => {
-    try {
-      const res = await axios.post(`${API_BASE}/accounts/${accountId}/simple-login`);
-      toast.success(res.data.message || 'Browser opening on server. Please login manually.');
       
-      setTimeout(() => {
-        loadAccounts();
-      }, 3000);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to start manual login');
-    }
-  };
-
-  // Extract cookie - LUÔN CHO PHÉP
-  const handleExtractCookie = async (accountId) => {
-    try {
-      const res = await axios.post(`${API_BASE}/accounts/${accountId}/extract-cookie`);
-      toast.success(res.data.message || 'Extracting session cookie...');
+      const data = await response.json();
       
-      setTimeout(() => {
-        loadAccounts();
-      }, 5000);
+      if (data.success) {
+        alert('✅ Account deleted successfully');
+        fetchAccounts();
+        fetchStats();
+      } else {
+        throw new Error(data.error);
+      }
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to extract cookie');
+      console.error('Delete error:', error);
+      alert('❌ Failed to delete account: ' + error.message);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this account?')) return;
-
-    try {
-      await axios.delete(`${API_BASE}/accounts/${id}`);
-      toast.success('Account deleted');
-      loadAccounts();
-      loadStats();
-    } catch (error) {
-      toast.error('Failed to delete account');
-    }
-  };
-
-  const downloadTemplate = () => {
-    const csv = `email,password,recover_mail,twoFA
-example1@gmail.com,Password123,,SECRETKEY123
-example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'accounts-template.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      'active': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'login-required': 'bg-blue-100 text-blue-800',
-      'processing': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'error': 'bg-red-100 text-red-800'
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      'active': { 
+        color: 'bg-green-100 text-green-800', 
+        icon: CheckCircleIcon, 
+        text: 'Active' 
+      },
+      'login-required': { 
+        color: 'bg-yellow-100 text-yellow-800', 
+        icon: ClockIcon, 
+        text: 'Login Required' 
+      },
+      'suspended': { 
+        color: 'bg-red-100 text-red-800', 
+        icon: XCircleIcon, 
+        text: 'Suspended' 
+      },
+      'login-pending': { 
+        color: 'bg-blue-100 text-blue-800', 
+        icon: ClockIcon, 
+        text: 'Login Pending' 
+      },
+      'simple-login-pending': { 
+        color: 'bg-purple-100 text-purple-800', 
+        icon: ClockIcon, 
+        text: 'Simple Login Pending' 
+      }
     };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+
+    const config = statusConfig[status] || statusConfig['login-required'];
+    const Icon = config.icon;
+
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
+        <Icon className="w-4 h-4 mr-1" />
+        {config.text}
+      </span>
+    );
   };
 
-  const getCookieStatusBadge = (acc) => {
-    const cookieStatus = acc.metadata?.cookieStatus || 'none';
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffHours = Math.floor((now - date) / (1000 * 60 * 60));
     
-    const badges = {
-      'active': <span className="text-xs text-green-600 flex items-center gap-1">✓ Active</span>,
-      'extracting': <span className="text-xs text-blue-600 flex items-center gap-1">⏳ Extracting...</span>,
-      'failed': <span className="text-xs text-red-600 flex items-center gap-1" title={acc.metadata?.cookieError}>✗ Failed</span>,
-      'expired': <span className="text-xs text-orange-600 flex items-center gap-1">⚠ Expired</span>,
-      'none': <span className="text-xs text-gray-400">➖ No Cookie</span>
-    };
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
     
-    return badges[cookieStatus] || badges['none'];
-  };
-
-  const formatTimeAgo = (date) => {
-    if (!date) return '-';
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
     
-    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-    
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d ago`;
-    return new Date(date).toLocaleDateString();
-  };
-
-  const getCookieButtonText = (acc) => {
-    if (acc.metadata?.cookieStatus === 'extracting') return 'Extracting...';
-    if (acc.sessionCookie) return 'Refresh';
-    return 'Get Cookie';
-  };
-
-  const getCookieButtonTitle = (acc) => {
-    if (acc.metadata?.cookieStatus === 'extracting') return 'Extracting cookie...';
-    if (acc.sessionCookie) {
-      const lastUpdate = acc.lastCookieUpdate 
-        ? new Date(acc.lastCookieUpdate).toLocaleString() 
-        : 'Unknown';
-      return `Last updated: ${lastUpdate}. Click to refresh.`;
-    }
-    return 'Extract session cookie from Whisk';
+    return date.toLocaleDateString();
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Accounts</h1>
-          <p className="text-gray-600 mt-1">
-            Total: {stats.total || 0} | Active: {stats.byStatus?.active || 0} | 
-            Cookies: {stats.byCookieStatus?.active || 0} active
+          <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
+          <p className="text-sm text-gray-500">
+            Total: {stats.total} | Active: {stats.active} | Cookies: {stats.cookies} active
           </p>
         </div>
         
         <div className="flex gap-2">
-          <button 
-            onClick={loadAccounts}
-            className="btn-secondary"
-            disabled={loading}
+          <button
+            onClick={fetchAccounts}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <ArrowPathIcon className="w-4 h-4 mr-2" />
             Refresh
           </button>
-
-          <button 
-            onClick={() => setShowAddForm(true)}
-            className="btn-secondary"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Manual
-          </button>
-
-          <button 
-            onClick={downloadTemplate}
-            className="btn-secondary"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            CSV Template
-          </button>
-
-          <label className="btn-primary cursor-pointer">
-            <Upload className="w-4 h-4 mr-2" />
-            Import CSV
-            <input 
-              type="file" 
-              accept=".csv" 
-              onChange={handleCSVImport} 
-              className="hidden" 
-            />
+          
+          <label className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer">
+            {isImporting ? (
+              <>
+                <ArrowPathIcon className="w-4 h-4 mr-2 animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  disabled={isImporting}
+                />
+              </>
+            )}
           </label>
         </div>
       </div>
 
-      {showAddForm && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Add Account Manually</h2>
-          <form onSubmit={handleAddManual} className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Email *</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Password *</label>
-              <input
-                type="text"
-                value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Recovery Email</label>
-              <input
-                type="email"
-                value={formData.recoveryEmail}
-                onChange={(e) => setFormData({...formData, recoveryEmail: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">2FA Secret</label>
-              <input
-                type="text"
-                value={formData.twoFASecret}
-                onChange={(e) => setFormData({...formData, twoFASecret: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg"
-                placeholder="Optional: Base32 secret"
-              />
-            </div>
-            <div className="col-span-2 flex gap-2">
-              <button type="submit" className="btn-primary">
-                Add Account
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setShowAddForm(false)}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Cookie Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Last Cookie Update
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                2FA
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Source
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {accounts.map((acc) => (
-              <tr key={acc._id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 text-sm">{acc.email}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-xs ${getStatusColor(acc.status)}`}>
-                    {acc.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  {getCookieStatusBadge(acc)}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatTimeAgo(acc.lastCookieUpdate)}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  {acc.twoFASecret ? '✓ Yes' : '-'}
-                </td>
-                <td className="px-6 py-4 text-sm">{acc.source}</td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2 items-center">
-                    {/* LUÔN HIỂN THỊ GET COOKIE */}
-                    <button 
-                      onClick={() => handleExtractCookie(acc._id)}
-                      className={`flex items-center gap-1 ${
-                        acc.metadata?.cookieStatus === 'extracting'
-                          ? 'text-gray-400 cursor-not-allowed' 
-                          : 'text-purple-600 hover:text-purple-800'
-                      }`}
-                      disabled={acc.metadata?.cookieStatus === 'extracting'}
-                      title={getCookieButtonTitle(acc)}
-                    >
-                      <Key className="w-4 h-4" />
-                      <span className="text-xs">{getCookieButtonText(acc)}</span>
-                    </button>
-                    
-                    {/* Login button - chỉ hiện khi chưa login */}
-                    {(acc.status === 'login-required' || acc.status === 'error') && (
-                      <button 
-                        onClick={() => handleSimpleLogin(acc._id)}
-                        className="text-green-600 hover:text-green-800 flex items-center gap-1"
-                        title="Manual Login"
-                      >
-                        <User className="w-4 h-4" />
-                        <span className="text-xs">Login</span>
-                      </button>
-                    )}
-                    
-                    <button 
-                      onClick={() => handleDelete(acc._id)}
-                      className="text-red-600 hover:text-red-800"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
+      {/* Accounts Table */}
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="text-center py-12">
+            <ArrowPathIcon className="w-8 h-8 mx-auto text-gray-400 animate-spin" />
+            <p className="mt-2 text-sm text-gray-500">Loading accounts...</p>
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="text-center py-12">
+            <UserIcon className="w-12 h-12 mx-auto text-gray-400" />
+            <p className="mt-2 text-sm text-gray-500">No accounts yet. Import CSV to get started.</p>
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cookie Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Last Cookie Update
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  2FA
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Source
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {accounts.length === 0 && !loading && (
-          <div className="text-center py-12 text-gray-500">
-            No accounts yet. Import CSV or add manually.
-          </div>
-        )}
-
-        {loading && (
-          <div className="text-center py-12 text-gray-500">
-            Loading...
-          </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {accounts.map((account) => (
+                <tr key={account._id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{account.email}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {getStatusBadge(account.status)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {account.metadata?.cookieStatus === 'active' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircleIcon className="w-4 h-4 mr-1" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        No Cookie
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatDate(account.lastCookieUpdate)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {account.twoFASecret ? (
+                      <CheckCircleIcon className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircleIcon className="w-5 h-5 text-gray-300" />
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {account.source || 'manual'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center space-x-3">
+                      {account.status === 'login-required' && (
+                        <button
+                          onClick={() => handleSimpleLogin(account._id)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Login
+                        </button>
+                      )}
+                      {account.metadata?.profileReady && !account.sessionCookie && (
+                        <button
+                          onClick={() => handleExtractCookie(account._id)}
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          Get Cookie
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(account._id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete account"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
