@@ -1,7 +1,7 @@
 import Account from '../models/Account.js';
 import csv from 'csv-parser';
 import fs from 'fs';
-import { loginQueue, cookieQueue } from '../services/QueueService.js';
+import { loginQueue, simpleLoginQueue, cookieQueue } from '../services/QueueService.js';
 
 class AccountController {
   // Get all accounts
@@ -94,7 +94,7 @@ class AccountController {
       res.json({ 
         success: true, 
         data: account,
-        message: 'Account created. Click "Get Cookie" to extract session.'
+        message: 'Account created. Click "Login" to authenticate with Whisk.'
       });
     } catch (error) {
       res.status(500).json({ 
@@ -181,7 +181,6 @@ class AccountController {
             error: error.message 
           });
         });
-
     } catch (error) {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
@@ -230,7 +229,7 @@ class AccountController {
     }
   }
 
-  // Start simple login (100% manual)
+  // Start simple login (100% manual) - LOGIN VÀO WHISK
   async startSimpleLogin(req, res) {
     try {
       const { id } = req.params;
@@ -243,7 +242,8 @@ class AccountController {
         });
       }
 
-      const job = await loginQueue.add('simple-manual-login', {
+      // Dùng simpleLoginQueue thay vì loginQueue
+      const job = await simpleLoginQueue.add({
         accountId: account._id.toString(),
         email: account.email
       });
@@ -255,7 +255,7 @@ class AccountController {
       res.json({
         success: true,
         jobId: job.id,
-        message: 'Chrome will open on server. Please login manually.'
+        message: 'Chrome will open on server. Please login manually to Whisk.'
       });
     } catch (error) {
       res.status(500).json({ 
@@ -265,7 +265,7 @@ class AccountController {
     }
   }
 
-  // Extract cookie - ĐƠN GIẢN HÓA, BỎ VALIDATION
+  // Extract cookie
   async extractCookie(req, res) {
     try {
       const { id } = req.params;
@@ -278,7 +278,7 @@ class AccountController {
         });
       }
 
-      // Chỉ check đang extract hay không
+      // Check đang extract hay không
       if (account.metadata?.cookieStatus === 'extracting') {
         return res.status(400).json({ 
           success: false, 
