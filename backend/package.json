@@ -1,7 +1,7 @@
 {
   "name": "whisk-automation-backend",
   "version": "1.0.0",
-  "description": "Whisk Automation Backend - Google Whisk cookie extraction system",
+  "description": "Whisk Automation Backend - Google Whisk cookie extraction system with automated workflows",
   "type": "module",
   "main": "src/app.js",
   "scripts": {
@@ -14,7 +14,10 @@
     "automation",
     "cookie",
     "puppeteer",
-    "google"
+    "google",
+    "redis",
+    "mongodb",
+    "queue"
   ],
   "author": "Linh Chu Trong",
   "license": "MIT",
@@ -29,7 +32,9 @@
     "multer": "^1.4.5-lts.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "socket.io": "^4.7.2",
+    "fs-extra": "^11.3.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
@@ -37,5 +42,13 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chutronglinh/whisk-automation.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chutronglinh/whisk-automation/issues"
+  },
+  "homepage": "https://github.com/chutronglinh/whisk-automation#readme"
 }
