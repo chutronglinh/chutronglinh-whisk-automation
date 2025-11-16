@@ -20,7 +20,7 @@ const processSimpleLogin = async (job) => {
   console.log(`[SIMPLE LOGIN] Starting manual login process for account ${accountId}`);
 
   let browser;
-  let account;  // Khai báo ở ngoài try để catch block có thể truy cập
+  let account;
 
   try {
     account = await Account.findById(accountId);
@@ -38,10 +38,10 @@ const processSimpleLogin = async (job) => {
 
     console.log(`[SIMPLE LOGIN] Opening browser for ${email} - User will login manually`);
 
-    // Launch browser with profile
+    // Launch browser with profile - Use Google Chrome
     browser = await puppeteer.launch({
       headless: false,
-      executablePath: '/usr/bin/google-chrome',
+      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
       userDataDir: profileDir,
       args: [
         '--no-sandbox',

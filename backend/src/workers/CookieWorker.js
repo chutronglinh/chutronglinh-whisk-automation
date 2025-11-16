@@ -31,10 +31,10 @@ const processCookieExtraction = async (job) => {
 
     console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
 
-    // Launch browser with profile
+    // Launch browser with profile - Use Google Chrome
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: '/usr/bin/google-chrome',
+      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
       userDataDir: profilePath,
       args: [
         '--no-sandbox',
@@ -50,7 +50,7 @@ const processCookieExtraction = async (job) => {
 
     // Navigate to Whisk
     console.log(`[COOKIE EXTRACT] Navigating to Whisk...`);
-    await page.goto('https://whisk.google.com', { 
+    await page.goto('https://labs.google/fx/tools/whisk', { 
       waitUntil: 'networkidle2',
       timeout: 30000 
     });
@@ -74,7 +74,7 @@ const processCookieExtraction = async (job) => {
 
     // Validate cookie
     console.log(`[COOKIE EXTRACT] Validating cookie...`);
-    const response = await page.goto('https://whisk.google.com/api/user', {
+    const response = await page.goto('https://labs.google/fx/tools/whisk', {
       waitUntil: 'networkidle2',
       timeout: 15000
     });
@@ -83,9 +83,7 @@ const processCookieExtraction = async (job) => {
       throw new Error('Cookie validation failed. May be expired.');
     }
 
-    const userData = await response.json();
     console.log(`[COOKIE EXTRACT] Cookie validated successfully`);
-    console.log(`[COOKIE EXTRACT] User: ${userData.email || account.email}`);
 
     await browser.close();
 
