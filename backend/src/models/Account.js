@@ -1,37 +1,64 @@
 import mongoose from 'mongoose';
 
 const accountSchema = new mongoose.Schema({
-  accountId: {
-    type: String,
-    required: true,
-    unique: true
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true,
+    lowercase: true,
+    trim: true
   },
-  email: {
-    type: String,
-    required: true
+  password: { 
+    type: String, 
+    required: true 
   },
-  sessionCookie: {
+  recoveryEmail: {
     type: String,
-    default: ''
+    trim: true
   },
-  profilePath: {
+  twoFASecret: {
     type: String,
-    default: ''
+    trim: true
   },
-  status: {
-    type: String,
-    enum: ['active', 'blocked', 'pending', 'expired'],
+  phone: String,
+  cookies: {
+    type: Array,
+    default: []
+  },
+  status: { 
+    type: String, 
+    enum: ['pending', 'active', 'blocked', 'error', 'login-required'],
     default: 'pending'
   },
-  blockReason: String,
-  blockError: String,
-  blockedAt: Date,
-  lastChecked: Date,
-  projects: [{
-    type: String
-  }]
-}, {
-  timestamps: true
+  source: {
+    type: String,
+    enum: ['manual', 'csv-import', 'api'],
+    default: 'manual'
+  },
+  lastLogin: Date,
+  lastCookieUpdate: Date,
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  projects: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Project' 
+  }],
+  metadata: {
+    userAgent: String,
+    profilePath: String,
+    proxyUsed: String
+  }
+}, { 
+  timestamps: true 
 });
 
-export default mongoose.model('Account', accountSchema);
+// Index for faster queries
+accountSchema.index({ email: 1 });
+accountSchema.index({ status: 1 });
+accountSchema.index({ source: 1 });
+
+const Account = mongoose.model('Account', accountSchema);
+
+export default Account;
