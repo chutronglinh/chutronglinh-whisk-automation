@@ -54,10 +54,14 @@ const accountSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Index for faster queries
-accountSchema.index({ email: 1 });
+// CRITICAL: Chỉ định nghĩa index MỘT LẦN
+// Email đã có unique: true ở trên, không cần index lại
+// accountSchema.index({ email: 1 }); // ← XÓA DÒNG NÀY NẾU CÓ
+
+// Index cho queries
 accountSchema.index({ status: 1 });
 accountSchema.index({ source: 1 });
+accountSchema.index({ email: 1, status: 1 }); // Compound index
 
 const Account = mongoose.model('Account', accountSchema);
 
