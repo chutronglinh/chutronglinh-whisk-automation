@@ -1,407 +1,94 @@
 import Account from '../models/Account.js';
-import csv from 'csv-parser';
+import QueueService from '../services/QueueService.js';
 import fs from 'fs';
-import { loginQueue, simpleLoginQueue, cookieQueue } from '../services/QueueService.js';
 
 class AccountController {
   // Get all accounts
-  async getAll(req, res) {
+  static async getAll(req, res) {
     try {
-      const { status, source, cookieStatus, page = 1, limit = 50 } = req.query;
-      
+      const { 
+        page = 1, 
+        limit = 50,
+        status,
+        cookieStatus,
+        search 
+      } = req.query;
+
       const query = {};
+      
       if (status) query.status = status;
-      if (source) query.source = source;
       if (cookieStatus) query['metadata.cookieStatus'] = cookieStatus;
+      if (search) {
+        query.email = { $regex: search, $options: 'i' };
+      }
 
       const accounts = await Account.find(query)
-        .select('-password')
-        .populate('projects', 'name status')
+        .select('-cookies -password')
         .sort({ createdAt: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit)
         .lean();
 
-      const total = await Account.countDocuments(query);
+      const count = await Account.countDocuments(query);
 
-      res.json({
+      return res.json({
         success: true,
         data: accounts,
         pagination: {
-          total,
+          total: count,
           page: parseInt(page),
-          pages: Math.ceil(total / limit)
+          pages: Math.ceil(count / limit)
         }
       });
     } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      console.error('Get accounts error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
       });
     }
   }
 
   // Get account by ID
-  async getById(req, res) {
+  static async getById(req, res) {
     try {
       const account = await Account.findById(req.params.id)
         .select('-password')
-        .populate('projects')
         .lean();
 
       if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
         });
       }
 
-      res.json({ success: true, data: account });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Create account manually
-  async create(req, res) {
-    try {
-      const { email, password, recoveryEmail, twoFASecret, phone } = req.body;
-
-      const existing = await Account.findOne({ email });
-      if (existing) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Account already exists' 
-        });
-      }
-
-      const account = await Account.create({
-        email,
-        password,
-        recoveryEmail,
-        twoFASecret,
-        phone,
-        source: 'manual',
-        status: 'login-required',
-        metadata: {
-          cookieStatus: 'none'
-        }
-      });
-
-      res.json({ 
-        success: true, 
-        data: account,
-        message: 'Account created. Click "Login" to authenticate with Whisk.'
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Import CSV
-  async importCSV(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'No file uploaded' 
-        });
-      }
-
-      const accounts = [];
-      const errors = [];
-      const filePath = req.file.path;
-
-      const stream = fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (row) => {
-          if (!row.email || !row.password) {
-            errors.push(`Missing required fields: ${JSON.stringify(row)}`);
-            return;
-          }
-
-          accounts.push({
-            email: row.email.toLowerCase().trim(),
-            password: row.password,
-            recoveryEmail: row.recover_mail || '',
-            twoFASecret: row.twoFA || '',
-            status: 'login-required',
-            source: 'csv-import',
-            metadata: {
-              cookieStatus: 'none'
-            }
-          });
-        })
-        .on('end', async () => {
-          try {
-            const results = [];
-            for (const acc of accounts) {
-              try {
-                const existing = await Account.findOne({ email: acc.email });
-                if (!existing) {
-                  const created = await Account.create(acc);
-                  results.push(created);
-                } else {
-                  errors.push(`Duplicate: ${acc.email}`);
-                }
-              } catch (err) {
-                errors.push(`Failed: ${acc.email} - ${err.message}`);
-              }
-            }
-
-            fs.unlinkSync(filePath);
-
-            res.json({
-              success: true,
-              imported: results.length,
-              total: accounts.length,
-              errors: errors.length > 0 ? errors : undefined,
-              message: `Successfully imported ${results.length}/${accounts.length} accounts`
-            });
-          } catch (error) {
-            fs.unlinkSync(filePath);
-            res.status(500).json({ 
-              success: false, 
-              error: error.message 
-            });
-          }
-        })
-        .on('error', (error) => {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-          res.status(500).json({ 
-            success: false, 
-            error: error.message 
-          });
-        });
-    } catch (error) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Start manual login with auto-fill
-  async startManualLogin(req, res) {
-    try {
-      const { id } = req.params;
-      const account = await Account.findById(id);
-
-      if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
-        });
-      }
-
-      const job = await loginQueue.add('manual-login', {
-        accountId: account._id.toString(),
-        email: account.email,
-        password: account.password,
-        twoFASecret: account.twoFASecret
-      });
-
-      account.status = 'processing';
-      account.loginAttempts += 1;
-      await account.save();
-
-      res.json({
+      return res.json({
         success: true,
-        jobId: job.id,
-        message: 'Chrome browser will open. Email and password will be auto-filled.'
+        data: account
       });
     } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Start simple login (100% manual) - LOGIN VÀO WHISK
-  async startSimpleLogin(req, res) {
-    try {
-      const { id } = req.params;
-      const account = await Account.findById(id);
-
-      if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
-        });
-      }
-
-      // Dùng simpleLoginQueue thay vì loginQueue
-      const job = await simpleLoginQueue.add({
-        accountId: account._id.toString(),
-        email: account.email
-      });
-
-      account.status = 'processing';
-      account.loginAttempts += 1;
-      await account.save();
-
-      res.json({
-        success: true,
-        jobId: job.id,
-        message: 'Chrome will open on server. Please login manually to Whisk.'
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Extract cookie
-  async extractCookie(req, res) {
-    try {
-      const { id } = req.params;
-      const account = await Account.findById(id);
-
-      if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
-        });
-      }
-
-      // Check đang extract hay không
-      if (account.metadata?.cookieStatus === 'extracting') {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Cookie extraction already in progress' 
-        });
-      }
-
-      const job = await cookieQueue.add('extract-cookie', {
-        accountId: account._id.toString()
-      });
-
-      // Update status
-      account.status = 'processing';
-      account.metadata = account.metadata || {};
-      account.metadata.cookieStatus = 'extracting';
-      await account.save();
-
-      res.json({
-        success: true,
-        jobId: job.id,
-        message: 'Extracting session cookie from Whisk...'
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Update account
-  async update(req, res) {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-
-      delete updates._id;
-      delete updates.createdAt;
-      delete updates.updatedAt;
-
-      const account = await Account.findByIdAndUpdate(
-        id,
-        updates,
-        { new: true, runValidators: true }
-      ).select('-password');
-
-      if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
-        });
-      }
-
-      res.json({ success: true, data: account });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
-  }
-
-  // Delete account
-  async delete(req, res) {
-    try {
-      const account = await Account.findByIdAndDelete(req.params.id);
-
-      if (!account) {
-        return res.status(404).json({ 
-          success: false, 
-          error: 'Account not found' 
-        });
-      }
-
-      res.json({ 
-        success: true, 
-        message: 'Account deleted successfully' 
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      console.error('Get account error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
       });
     }
   }
 
   // Get account statistics
-  async getStats(req, res) {
+  static async getStats(req, res) {
     try {
-      const stats = await Account.aggregate([
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      const result = {
-        total: await Account.countDocuments(),
-        byStatus: {},
-        bySource: {},
-        byCookieStatus: {}
-      };
-
-      stats.forEach(stat => {
-        result.byStatus[stat._id] = stat.count;
+      const total = await Account.countDocuments();
+      const active = await Account.countDocuments({ status: 'active' });
+      const loginRequired = await Account.countDocuments({ status: 'login-required' });
+      const suspended = await Account.countDocuments({ status: 'suspended' });
+      
+      const withCookies = await Account.countDocuments({ 
+        'metadata.cookieStatus': 'active' 
       });
 
-      const sourceStats = await Account.aggregate([
-        {
-          $group: {
-            _id: '$source',
-            count: { $sum: 1 }
-          }
-        }
-      ]);
-
-      sourceStats.forEach(stat => {
-        result.bySource[stat._id] = stat.count;
-      });
-
-      const cookieStats = await Account.aggregate([
+      const byCookieStatus = await Account.aggregate([
         {
           $group: {
             _id: '$metadata.cookieStatus',
@@ -410,18 +97,366 @@ class AccountController {
         }
       ]);
 
-      cookieStats.forEach(stat => {
-        result.byCookieStatus[stat._id || 'none'] = stat.count;
+      return res.json({
+        success: true,
+        data: {
+          total,
+          active,
+          loginRequired,
+          suspended,
+          withCookies,
+          byCookieStatus: byCookieStatus.reduce((acc, item) => {
+            acc[item._id || 'none'] = item.count;
+            return acc;
+          }, {})
+        }
+      });
+    } catch (error) {
+      console.error('Get stats error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Create account manually
+  static async create(req, res) {
+    try {
+      const { email, password, recoveryEmail, twoFASecret } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email is required'
+        });
+      }
+
+      // Check if account exists
+      const existing = await Account.findOne({ email });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          error: 'Account already exists'
+        });
+      }
+
+      const account = await Account.create({
+        email,
+        password,
+        recoveryEmail: recoveryEmail || '',
+        twoFASecret: twoFASecret || '',
+        status: 'login-required',
+        source: 'manual'
       });
 
-      res.json({ success: true, data: result });
+      return res.json({
+        success: true,
+        data: account
+      });
     } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      console.error('Create account error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Import accounts from CSV
+  static async importCSV(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded'
+        });
+      }
+
+      const fileContent = fs.readFileSync(req.file.path, 'utf-8');
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          error: 'CSV file is empty'
+        });
+      }
+
+      // Parse header to support multiple formats
+      const header = lines[0].toLowerCase().trim();
+      const accounts = [];
+      const errors = [];
+      const skipped = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = lines[i].split(',').map(v => v.trim());
+          
+          // Support multiple CSV formats
+          let email, password, recoveryEmail, twoFASecret;
+          
+          if (header.includes('password')) {
+            // Format: email,password,recover_mail,twoFA
+            [email, password, recoveryEmail, twoFASecret] = values;
+          } else {
+            // Format: email,recoveryEmail,twoFASecret
+            [email, recoveryEmail, twoFASecret] = values;
+            password = null;
+          }
+
+          if (!email) {
+            skipped.push({ line: i + 1, reason: 'Empty email' });
+            continue;
+          }
+
+          // Check if account already exists
+          const existing = await Account.findOne({ email: email.trim() });
+          if (existing) {
+            skipped.push({ 
+              line: i + 1, 
+              email: email.trim(),
+              reason: 'Account already exists' 
+            });
+            continue;
+          }
+
+          const account = await Account.create({
+            email: email.trim(),
+            password: password || undefined,
+            recoveryEmail: recoveryEmail || '',
+            twoFASecret: twoFASecret || '',
+            status: 'login-required',
+            source: 'csv-import',
+            metadata: {
+              cookieStatus: 'none'
+            }
+          });
+
+          accounts.push({
+            _id: account._id,
+            email: account.email
+          });
+
+        } catch (error) {
+          errors.push({
+            line: i + 1,
+            error: error.message
+          });
+        }
+      }
+
+      // Clean up uploaded file
+      fs.unlinkSync(req.file.path);
+
+      return res.json({
+        success: true,
+        data: {
+          imported: accounts.length,
+          skipped: skipped.length,
+          errors: errors.length,
+          accounts: accounts,
+          skippedDetails: skipped,
+          errorDetails: errors
+        }
+      });
+
+    } catch (error) {
+      console.error('Import CSV error:', error);
+      
+      // Clean up file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Update account
+  static async update(req, res) {
+    try {
+      const { status, recoveryEmail, twoFASecret, metadata } = req.body;
+
+      const updateData = {};
+      if (status) updateData.status = status;
+      if (recoveryEmail !== undefined) updateData.recoveryEmail = recoveryEmail;
+      if (twoFASecret !== undefined) updateData.twoFASecret = twoFASecret;
+      if (metadata) updateData.metadata = { ...updateData.metadata, ...metadata };
+
+      const account = await Account.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      ).select('-password');
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: account
+      });
+    } catch (error) {
+      console.error('Update account error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Delete account
+  static async delete(req, res) {
+    try {
+      const account = await Account.findByIdAndDelete(req.params.id);
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Account deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete account error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Start manual login (auto-fill credentials)
+  static async startManualLogin(req, res) {
+    try {
+      const account = await Account.findById(req.params.id);
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      if (!account.password) {
+        return res.status(400).json({
+          success: false,
+          error: 'Account password not set'
+        });
+      }
+
+      // Add to manual login queue
+      const job = await QueueService.addLoginJob({
+        accountId: account._id.toString(),
+        email: account.email,
+        password: account.password,
+        twoFASecret: account.twoFASecret
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          jobId: job.id,
+          message: 'Login job queued'
+        }
+      });
+    } catch (error) {
+      console.error('Start manual login error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Start simple login (100% manual)
+  static async startSimpleLogin(req, res) {
+    try {
+      const account = await Account.findById(req.params.id);
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      // Add to simple login queue
+      const job = await QueueService.addSimpleLoginJob({
+        accountId: account._id.toString(),
+        email: account.email
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          jobId: job.id,
+          message: 'Simple login job queued. Browser will open for manual login.'
+        }
+      });
+    } catch (error) {
+      console.error('Start simple login error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Extract cookie from logged-in profile
+  static async extractCookie(req, res) {
+    try {
+      const account = await Account.findById(req.params.id);
+
+      if (!account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      if (!account.metadata?.profileReady) {
+        return res.status(400).json({
+          success: false,
+          error: 'Profile not ready. Please login first.'
+        });
+      }
+
+      // Add to cookie extraction queue
+      const job = await QueueService.addCookieJob({
+        accountId: account._id.toString(),
+        email: account.email,
+        profilePath: account.metadata.profilePath
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          jobId: job.id,
+          message: 'Cookie extraction job queued'
+        }
+      });
+    } catch (error) {
+      console.error('Extract cookie error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message
       });
     }
   }
 }
 
-export default new AccountController();
+export default AccountController;
