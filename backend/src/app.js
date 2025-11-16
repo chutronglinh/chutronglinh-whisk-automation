@@ -3,22 +3,21 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { connectDB } from './config/database.js';
-import { errorHandler, notFound } from './middleware/errorHandler.js';
+import connectDB from './config/database.js';
+import './services/QueueService.js';
 
-// Routes
-import accountRoutes from './routes/accounts.js';
-import projectRoutes from './routes/projects.js';
-import promptRoutes from './routes/prompts.js';
-import jobRoutes from './routes/jobs.js';
-import imageRoutes from './routes/images.js';
+// Import routes
+import routes from './routes/index.js';
 
 dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*' }
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
 });
 
 // Middleware
@@ -30,38 +29,46 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/output', express.static(process.env.OUTPUT_PATH || './output'));
 
 // Routes
-app.use('/api/accounts', accountRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/prompts', promptRoutes);
-app.use('/api/jobs', jobRoutes);
-app.use('/api/images', imageRoutes);
+app.use('/api', routes);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Error handling
-app.use(notFound);
-app.use(errorHandler);
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found'
+  });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal server error'
+  });
+});
 
 // Socket.io
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
 });
 
-// Export io for use in workers
-export { io };
-
 // Start server
 const PORT = process.env.PORT || 3000;
 
 connectDB().then(() => {
-  httpServer.listen(PORT, () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`✓ Server running on port ${PORT}`);
   });
 });
+
+export { app, io };
