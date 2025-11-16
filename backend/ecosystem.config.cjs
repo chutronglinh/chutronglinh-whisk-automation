@@ -19,7 +19,7 @@ module.exports = {
       max_memory_restart: '1G'
     },
 
-    // Manual Login Worker
+    // Auto Login Worker (auto-fill email/password)
     {
       name: 'whisk-worker-login',
       script: './src/workers/ManualLoginWorker.js',
@@ -30,6 +30,24 @@ module.exports = {
       },
       error_file: './logs/worker-login-error.log',
       out_file: './logs/worker-login-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      autorestart: true,
+      max_restarts: 5,
+      min_uptime: '10s',
+      max_memory_restart: '500M'
+    },
+
+    // Simple Manual Login Worker - MỚI (100% manual)
+    {
+      name: 'whisk-worker-simple-login',
+      script: './src/workers/SimpleLoginWorker.js',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        DISPLAY: ':0'
+      },
+      error_file: './logs/worker-simple-login-error.log',
+      out_file: './logs/worker-simple-login-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       autorestart: true,
       max_restarts: 5,

@@ -14,7 +14,7 @@ class AccountController {
       if (source) query.source = source;
 
       const accounts = await Account.find(query)
-        .select('-password') // Don't return passwords
+        .select('-password')
         .populate('projects', 'name status')
         .sort({ createdAt: -1 })
         .limit(limit * 1)
@@ -67,7 +67,6 @@ class AccountController {
     try {
       const { email, password, recoveryEmail, twoFASecret, phone } = req.body;
 
-      // Check if account exists
       const existing = await Account.findOne({ email });
       if (existing) {
         return res.status(400).json({ 
@@ -113,11 +112,9 @@ class AccountController {
       const errors = [];
       const filePath = req.file.path;
 
-      // Parse CSV
       const stream = fs.createReadStream(filePath)
         .pipe(csv())
         .on('data', (row) => {
-          // Validate required fields
           if (!row.email || !row.password) {
             errors.push(`Missing required fields: ${JSON.stringify(row)}`);
             return;
@@ -134,7 +131,6 @@ class AccountController {
         })
         .on('end', async () => {
           try {
-            // Bulk insert with error handling
             const results = [];
             for (const acc of accounts) {
               try {
@@ -150,7 +146,6 @@ class AccountController {
               }
             }
 
-            // Cleanup uploaded file
             fs.unlinkSync(filePath);
 
             res.json({
@@ -189,7 +184,7 @@ class AccountController {
     }
   }
 
-  // Start manual login
+  // Start auto login (with password autofill)
   async startManualLogin(req, res) {
     try {
       const { id } = req.params;
@@ -202,7 +197,6 @@ class AccountController {
         });
       }
 
-      // Add job to login queue
       const job = await loginQueue.add('manual-login', {
         accountId: account._id.toString(),
         email: account.email,
@@ -210,7 +204,6 @@ class AccountController {
         twoFASecret: account.twoFASecret
       });
 
-      // Update account status
       account.status = 'processing';
       account.loginAttempts += 1;
       await account.save();
@@ -218,7 +211,42 @@ class AccountController {
       res.json({
         success: true,
         jobId: job.id,
-        message: 'Chrome browser will open. Please complete login manually.'
+        message: 'Chrome browser will open. Email and password will be auto-filled.'
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  // Start simple login (100% manual) - MỚI
+  async startSimpleLogin(req, res) {
+    try {
+      const { id } = req.params;
+      const account = await Account.findById(id);
+
+      if (!account) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Account not found' 
+        });
+      }
+
+      const job = await loginQueue.add('simple-manual-login', {
+        accountId: account._id.toString(),
+        email: account.email
+      });
+
+      account.status = 'processing';
+      account.loginAttempts += 1;
+      await account.save();
+
+      res.json({
+        success: true,
+        jobId: job.id,
+        message: 'Chrome will open on server. Please login manually in the browser window.'
       });
     } catch (error) {
       res.status(500).json({ 
@@ -234,7 +262,6 @@ class AccountController {
       const { id } = req.params;
       const updates = req.body;
 
-      // Don't allow updating certain fields
       delete updates._id;
       delete updates.createdAt;
       delete updates.updatedAt;
