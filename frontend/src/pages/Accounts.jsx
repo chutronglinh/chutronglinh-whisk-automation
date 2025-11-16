@@ -80,9 +80,6 @@ export default function Accounts() {
           data.data.skippedDetails.slice(0, 5).forEach(item => {
             message += `- ${item.email || 'Line ' + item.line}: ${item.reason}\n`;
           });
-          if (data.data.skippedDetails.length > 5) {
-            message += `... and ${data.data.skippedDetails.length - 5} more\n`;
-          }
         }
 
         alert(message);
@@ -305,7 +302,7 @@ export default function Accounts() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-3">
-                      {/* Login - only if NEW */}
+                      {/* Login button - CHỈ KHI status === 'NEW' */}
                       {account.status === 'NEW' && (
                         <button
                           onClick={() => handleSimpleLogin(account._id)}
@@ -315,15 +312,18 @@ export default function Accounts() {
                         </button>
                       )}
                       
-                      {/* Get Cookie / Refresh Cookie - ALWAYS show */}
-                      {!account.sessionCookie ? (
+                      {/* Get Cookie button - LUÔN HIỆN nếu chưa có cookie */}
+                      {!account.sessionCookie && (
                         <button
                           onClick={() => handleExtractCookie(account._id, false)}
                           className="text-green-600 hover:text-green-900 font-medium"
                         >
                           Get Cookie
                         </button>
-                      ) : (
+                      )}
+                      
+                      {/* Refresh Cookie button - LUÔN HIỆN nếu đã có cookie */}
+                      {account.sessionCookie && (
                         <button
                           onClick={() => handleExtractCookie(account._id, true)}
                           className="text-orange-600 hover:text-orange-900 font-medium"
@@ -332,7 +332,7 @@ export default function Accounts() {
                         </button>
                       )}
                       
-                      {/* Delete - always */}
+                      {/* Delete button - LUÔN HIỆN */}
                       <button
                         onClick={() => handleDelete(account._id)}
                         className="text-red-600 hover:text-red-900"

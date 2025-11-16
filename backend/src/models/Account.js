@@ -63,10 +63,8 @@ const accountSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
 accountSchema.index({ email: 1 });
 accountSchema.index({ status: 1 });
-accountSchema.index({ 'metadata.cookieStatus': 1 });
 
 const Account = mongoose.model('Account', accountSchema);
 
