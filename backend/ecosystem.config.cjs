@@ -1,9 +1,9 @@
 module.exports = {
   apps: [
-    // API Server
+    // API Server (2 instances)
     {
       name: 'whisk-api',
-      script: './src/app.js',
+      script: './src/server.js',
       instances: 2,
       exec_mode: 'cluster',
       env: {
@@ -11,99 +11,104 @@ module.exports = {
         PORT: 3000,
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
-        REDIS_PORT: 6379
+        REDIS_PORT: 6379,
+        PROFILE_PATH: '/opt/whisk-automation/data/profiles',
+        UPLOAD_PATH: '/opt/whisk-automation/data/uploads',
+        OUTPUT_PATH: '/opt/whisk-automation/data/output/images',
+        DISPLAY: ':0',
+        CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Manual Login Worker (Auto-fill email/password)
+    
+    // Manual Login Worker (1 instance)
     {
       name: 'whisk-worker-login',
       script: './src/workers/ManualLoginWorker.js',
       instances: 1,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
-        PROFILE_PATH: '/opt/whisk-automation/data/profiles'
+        PROFILE_PATH: '/opt/whisk-automation/data/profiles',
+        DISPLAY: ':0',
+        CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-login-error.log',
       out_file: './logs/worker-login-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Simple Login Worker (100% Manual)
+    
+    // Simple Login Worker (1 instance)
     {
       name: 'whisk-worker-simple-login',
       script: './src/workers/SimpleLoginWorker.js',
       instances: 1,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
-        PROFILE_PATH: '/opt/whisk-automation/data/profiles'
+        PROFILE_PATH: '/opt/whisk-automation/data/profiles',
+        DISPLAY: ':0',
+        CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-simple-login-error.log',
       out_file: './logs/worker-simple-login-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Profile Worker
+    
+    // Profile Setup Worker (1 instance)
     {
       name: 'whisk-worker-profile',
       script: './src/workers/ProfileWorker.js',
       instances: 1,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
-        PROFILE_PATH: '/opt/whisk-automation/data/profiles'
+        PROFILE_PATH: '/opt/whisk-automation/data/profiles',
+        DISPLAY: ':0',
+        CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-profile-error.log',
       out_file: './logs/worker-profile-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Cookie Worker (Extract session cookies)
+    
+    // Cookie Extraction Worker (2 instances)
     {
       name: 'whisk-worker-cookie',
       script: './src/workers/CookieWorker.js',
       instances: 2,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
-        PROFILE_PATH: '/opt/whisk-automation/data/profiles'
+        PROFILE_PATH: '/opt/whisk-automation/data/profiles',
+        DISPLAY: ':0',
+        CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-cookie-error.log',
       out_file: './logs/worker-cookie-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Project Worker
+    
+    // Project Creation Worker (2 instances)
     {
       name: 'whisk-worker-project',
-      script: './src/workers/ProjectWorker.js',
+      script: './src/workers/ProjectCreationWorker.js',
       instances: 2,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
@@ -112,27 +117,28 @@ module.exports = {
       },
       error_file: './logs/worker-project-error.log',
       out_file: './logs/worker-project-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
-
-    // Image Worker
+    
+    // Image Generation Worker (4 instances) ✨ NEW
     {
       name: 'whisk-worker-image',
-      script: './src/workers/ImageWorker.js',
+      script: './src/workers/ImageGenerationWorker.js',
       instances: 4,
+      exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
-        REDIS_PORT: 6379
+        REDIS_PORT: 6379,
+        OUTPUT_PATH: '/opt/whisk-automation/data/output/images',
+        IMAGE_MODEL: 'IMAGEN_3_5',
+        DEFAULT_ASPECT_RATIO: 'IMAGE_ASPECT_RATIO_LANDSCAPE',
+        MEDIA_CATEGORY: 'MEDIA_CATEGORY_BOARD'
       },
       error_file: './logs/worker-image-error.log',
       out_file: './logs/worker-image-out.log',
-      merge_logs: true,
-      time: true,
-      max_memory_restart: '500M'
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     }
   ]
 };

@@ -1,109 +1,101 @@
 # ============================================
-# Whisk Automation - Git Ignore Configuration
+# NODE MODULES
 # ============================================
-
-# ==================
-# Environment Files
-# ==================
-backend/.env
-.env
-*.env
-!deployment/.env.example
-
-# ==================
-# Dependencies
-# ==================
 node_modules/
-frontend/node_modules/
-backend/node_modules/
-/node_modules/
-
-# NPM
-package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.npm
-.yarn
+lerna-debug.log*
+.pnpm-debug.log*
 
-# ==================
-# Build & Distribution
-# ==================
-frontend/dist/
-frontend/build/
-backend/dist/
-backend/build/
-dist/
-build/
+# ============================================
+# ENVIRONMENT & CONFIG
+# ============================================
+.env
+.env.local
+.env.*.local
+*.env
 
-# ==================
-# Logs
-# ==================
-backend/logs/
-*.log
-logs/
-pm2-logs/
-.pm2/logs/
-
-# PM2
-.pm2/
-pm2.log
-pm2-error.log
-
-# ==================
-# Data & Output
-# ==================
+# ============================================
+# DATA DIRECTORIES
+# ============================================
+# Chrome profiles
 data/profiles/
-data/output/
+profiles/
+
+# Uploads
 data/uploads/
-data/temp/
 uploads/
+
+# Generated images
+data/output/
 output/
 
-# Chrome profiles
-profiles/
-.chrome-profiles/
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# MongoDB dumps
-dump/
-*.dump
+# ============================================
+# PM2
+# ============================================
+.pm2/
+.pm2-dev/
+ecosystem.config.js.bak
+dump.pm2
 
-# ==================
-# Operating System
-# ==================
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-.Spotlight-V100
-.Trashes
+# ============================================
+# BUILD & DIST
+# ============================================
+dist/
+dist-ssr/
+build/
+.next/
+out/
+.nuxt/
+.cache/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
 
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.lnk
+# ============================================
+# TESTING
+# ============================================
+coverage/
+.nyc_output/
+*.lcov
+.grunt
+lib-cov
+.lock-wscript
+jspm_packages/
 
-# Linux
-*~
-.directory
-.Trash-*
-
-# ==================
-# IDEs & Editors
-# ==================
+# ============================================
+# IDE & EDITORS
+# ============================================
 # VSCode
 .vscode/
-.vscode-test/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 *.code-workspace
 
-# JetBrains IDEs
+# IntelliJ IDEA
 .idea/
 *.iml
 *.iws
 *.ipr
+.idea_modules/
 
 # Sublime Text
 *.sublime-project
@@ -114,156 +106,150 @@ $RECYCLE.BIN/
 *.swo
 *~
 
-# Emacs
+# ============================================
+# OS FILES
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
 *~
-\#*\#
-.\#*
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
 
-# ==================
-# Testing & Coverage
-# ==================
-coverage/
-.nyc_output/
-*.lcov
-test-results/
-.coverage
-htmlcov/
-
-# ==================
-# Cache & Temporary
-# ==================
-.cache/
-*.cache
-.temp/
-tmp/
-temp/
-.tmp/
-
-# ESLint
-.eslintcache
-
-# Parcel
-.parcel-cache/
-
-# Next.js
-.next/
-out/
-
-# Nuxt
-.nuxt/
-
-# Gatsby
-.cache/
-public/
-
-# ==================
-# Backup & Archive
-# ==================
+# ============================================
+# TEMPORARY FILES
+# ============================================
+*.tmp
+*.temp
 *.bak
 *.backup
 *.old
 *.orig
 *.swp
-*.tar
-*.tar.gz
-*.zip
-*.rar
+*.swo
 
-# ==================
-# Database
-# ==================
-*.db
+# ============================================
+# DATABASE
+# ============================================
 *.sqlite
 *.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
-# ==================
-# SSL Certificates
-# ==================
+# MongoDB
+data/db/
+dump/
+
+# ============================================
+# TYPESCRIPT
+# ============================================
+*.tsbuildinfo
+.tsbuildinfo
+
+# ============================================
+# REACT / VITE
+# ============================================
+# Vite
+.vite/
+*.local
+
+# React
+.eslintcache
+
+# ============================================
+# PUPPETEER
+# ============================================
+.local-chromium/
+.local-firefox/
+
+# ============================================
+# CERTIFICATES & KEYS
+# ============================================
 *.pem
 *.key
+*.cert
 *.crt
-*.csr
 *.p12
 *.pfx
 
-# ==================
-# Docker (if used)
-# ==================
-.dockerignore
-docker-compose.override.yml
+# ============================================
+# BACKUP FILES
+# ============================================
+*.json.backup.*
+accounts.json.backup.*
 
-# ==================
-# CI/CD
-# ==================
-.github/workflows/secrets.yml
-
-# ==================
-# Misc
-# ==================
-.setup-complete
-*.pid
-*.seed
-*.pid.lock
-
-# TypeScript
-*.tsbuildinfo
-
+# ============================================
+# MISCELLANEOUS
+# ============================================
 # Optional npm cache directory
 .npm
 
 # Optional eslint cache
 .eslintcache
 
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
 # Optional REPL history
 .node_repl_history
 
-# Output of 'npm pack'
-*.tgz
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
 
-# Yarn Integrity file
-.yarn-integrity
+# parcel-bundler cache
+.parcel-cache
 
-# dotenv environment variable files
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+# Stores VSCode versions used for testing
+.vscode-test
 
-# ==================
-# Project Specific
-# ==================
-# Deployment markers
-.deployed
-.last-deploy
-
-# Setup flags
-.setup-complete
-.installation-complete
-
-# Local development
-.local/
-local/
-
-# Screenshots & media
-screenshots/
-*.png.old
-*.jpg.old
-
-# ==================
-# Security
-# ==================
-# SSH keys
-*.pem
-id_rsa*
-id_dsa*
-id_ecdsa*
-id_ed25519*
-
-# API keys & secrets
-secrets.json
-credentials.json
-service-account*.json
-
-# ==================
-# END
-# ==================
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
