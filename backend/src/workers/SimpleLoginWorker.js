@@ -1,8 +1,16 @@
 import { simpleLoginQueue } from '../services/QueueService.js';
 import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
+import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
+
+// Connect to MongoDB
+if (mongoose.connection.readyState === 0) {
+  mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/whisk-automation')
+    .then(() => console.log('[SIMPLE LOGIN WORKER] ✓ MongoDB connected'))
+    .catch(err => console.error('[SIMPLE LOGIN WORKER] ✗ MongoDB error:', err));
+}
 
 console.log('[SIMPLE LOGIN WORKER] Started and ready for manual logins');
 
@@ -18,7 +26,7 @@ const processSimpleLogin = async (job) => {
       throw new Error('Account not found');
     }
 
-    const { email, password } = account;
+    const { email } = account;
 
     // Create profile directory
     const profileDir = path.join(process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles', accountId);
@@ -46,28 +54,32 @@ const processSimpleLogin = async (job) => {
 
     const page = await browser.newPage();
 
-    // Navigate to Google login
-    await page.goto('https://accounts.google.com/', { 
+    // Navigate to Whisk (not Google accounts page)
+    // Whisk will redirect to Google login automatically
+    await page.goto('https://labs.google/fx/tools/whisk', { 
       waitUntil: 'networkidle2',
       timeout: 30000 
     });
 
     console.log(`[SIMPLE LOGIN] Browser opened. Waiting for user to complete login (max 10 minutes)...`);
 
-    // Wait for login completion - check for Google account page
+    // Wait for login completion - check for Whisk page after authentication
     await page.waitForFunction(
       () => {
         const url = window.location.href;
-        // Check if logged in (myaccount page or drive/gmail)
-        return url.includes('myaccount.google.com') || 
-               url.includes('drive.google.com') ||
-               url.includes('mail.google.com') ||
-               document.querySelector('a[href*="SignOutOptions"]') !== null;
+        // Check if logged in to Whisk (not on signin page)
+        return url.includes('labs.google/fx/tools/whisk') && 
+               !url.includes('signin') &&
+               !url.includes('accounts.google.com') &&
+               !url.includes('ServiceLogin');
       },
       { timeout: 600000 } // 10 minutes
     );
 
-    console.log(`[SIMPLE LOGIN] Login detected! Profile ready.`);
+    console.log(`[SIMPLE LOGIN] Login detected! Whisk authenticated. Profile ready.`);
+
+    // Get user agent
+    const userAgent = await page.evaluate(() => navigator.userAgent);
 
     await browser.close();
 
@@ -82,9 +94,10 @@ const processSimpleLogin = async (job) => {
           status: 'pending',
           lastLogin: new Date(),
           loginAttempts: 0,
-          'metadata.userAgent': await page.evaluate(() => navigator.userAgent),
+          'metadata.userAgent': userAgent,
           'metadata.profilePath': profileDir,
-          'metadata.profileReady': true
+          'metadata.profileReady': true,
+          'metadata.whiskAuthenticated': true
         });
         updateSuccess = true;
         console.log(`[SIMPLE LOGIN] Database updated for ${email}`);
@@ -98,14 +111,14 @@ const processSimpleLogin = async (job) => {
       }
     }
 
-    console.log(`[SIMPLE LOGIN] Success! Profile ready for ${email}`);
+    console.log(`[SIMPLE LOGIN] Success! Whisk profile ready for ${email}`);
     console.log(`[SIMPLE LOGIN] Next step: Click "Get Cookie" button to extract session cookie`);
 
     return {
       success: true,
       email,
       profilePath: profileDir,
-      message: 'Login successful. Profile ready. Please click "Get Cookie" to extract session cookie.'
+      message: 'Login successful. Whisk authenticated. Please click "Get Cookie" to extract session cookie.'
     };
 
   } catch (error) {

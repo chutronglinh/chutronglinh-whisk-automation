@@ -23,6 +23,19 @@ export const loginQueue = new Queue('manual-login', {
   }
 });
 
+export const simpleLoginQueue = new Queue('simple-login', {
+  redis: redisConfig,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000
+    },
+    removeOnComplete: 100,
+    removeOnFail: 100
+  }
+});
+
 export const cookieQueue = new Queue('cookie-extraction', {
   redis: redisConfig,
   defaultJobOptions: {
@@ -62,6 +75,18 @@ loginQueue.on('stalled', (job) => {
   console.warn(`[LOGIN QUEUE] Job ${job.id} stalled`);
 });
 
+simpleLoginQueue.on('completed', (job, result) => {
+  console.log(`[SIMPLE LOGIN QUEUE] Job ${job.id} completed:`, result);
+});
+
+simpleLoginQueue.on('failed', (job, err) => {
+  console.error(`[SIMPLE LOGIN QUEUE] Job ${job.id} failed:`, err.message);
+});
+
+simpleLoginQueue.on('stalled', (job) => {
+  console.warn(`[SIMPLE LOGIN QUEUE] Job ${job.id} stalled`);
+});
+
 cookieQueue.on('completed', (job, result) => {
   console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
 });
@@ -84,6 +109,7 @@ imageQueue.on('failed', (job, err) => {
 
 export default {
   loginQueue,
+  simpleLoginQueue,
   cookieQueue,
   imageQueue
 };
