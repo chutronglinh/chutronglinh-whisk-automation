@@ -140,9 +140,9 @@ class SimpleLoginWorker {
 
       const page = await browser.newPage();
 
-      // Navigate to Whisk login
+      // Navigate to Whisk - FIX URL HERE
       console.log('[SIMPLE LOGIN] Navigating to Whisk...');
-      await page.goto('https://labs.google.com/search/whisk', {
+      await page.goto('https://labs.google/fx/tools/whisk', {
         waitUntil: 'networkidle2',
         timeout: 60000
       });
