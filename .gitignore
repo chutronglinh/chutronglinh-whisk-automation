@@ -11,10 +11,17 @@ lerna-debug.log*
 # ============================================
 # ENVIRONMENT & CONFIG
 # ============================================
-.env
+# Allow backend/.env for easy deployment
+# .env
 .env.local
 .env.*.local
-*.env
+# *.env
+
+# Ignore sensitive env files
+backend/.env.production
+backend/.env.local
+frontend/.env
+frontend/.env.local
 
 # ============================================
 # DATA DIRECTORIES
