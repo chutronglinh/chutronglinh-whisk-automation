@@ -18,7 +18,8 @@ class AccountController {
         .populate('projects', 'name status')
         .sort({ createdAt: -1 })
         .limit(limit * 1)
-        .skip((page - 1) * limit);
+        .skip((page - 1) * limit)
+        .lean();
 
       const total = await Account.countDocuments(query);
 
@@ -44,7 +45,8 @@ class AccountController {
     try {
       const account = await Account.findById(req.params.id)
         .select('-password')
-        .populate('projects');
+        .populate('projects')
+        .lean();
 
       if (!account) {
         return res.status(404).json({ 
@@ -184,7 +186,7 @@ class AccountController {
     }
   }
 
-  // Start auto login (with password autofill)
+  // Start manual login with auto-fill
   async startManualLogin(req, res) {
     try {
       const { id } = req.params;
@@ -256,7 +258,7 @@ class AccountController {
     }
   }
 
-  // Extract cookie from logged-in profile - MỚI
+  // Extract cookie from logged-in profile
   async extractCookie(req, res) {
     try {
       const { id } = req.params;
@@ -272,7 +274,7 @@ class AccountController {
       if (!account.metadata?.profilePath) {
         return res.status(400).json({ 
           success: false, 
-          error: 'Profile not found. Please login first.' 
+          error: 'Profile path not found. Please login first.' 
         });
       }
 
@@ -283,7 +285,6 @@ class AccountController {
         });
       }
 
-      // Add job to cookie extraction queue
       const job = await cookieQueue.add('extract-cookie', {
         accountId: account._id.toString()
       });
