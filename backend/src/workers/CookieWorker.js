@@ -3,6 +3,9 @@ import Account from '../models/Account.js';
 import { connectDB } from '../config/database.js';
 import fs from 'fs';
 
+const WHISK_URL = 'https://labs.google/fx/tools/whisk';
+const COOKIE_NAME = '__Secure-next-auth.session-token';
+
 class CookieWorker {
   constructor() {
     this.isProcessing = false;
@@ -66,7 +69,8 @@ class CookieWorker {
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
+          '--disable-dev-shm-usage',
+          '--disable-gpu'
         ],
         userDataDir: profilePath
       });
@@ -74,7 +78,7 @@ class CookieWorker {
       const page = await browser.newPage();
 
       console.log('[COOKIE EXTRACT] Navigating to Whisk...');
-      await page.goto('https://labs.google/fx/tools/whisk', {
+      await page.goto(WHISK_URL, {
         waitUntil: 'networkidle2',
         timeout: 30000
       });
@@ -84,16 +88,19 @@ class CookieWorker {
       const cookies = await page.cookies();
       console.log(`[COOKIE EXTRACT] Extracted ${cookies.length} cookies`);
 
-      const sessionCookie = cookies.find(c => 
-        c.name === '__Secure-1PSID' || 
-        c.name === '__Secure-3PSID'
-      );
+      // Find the correct session cookie
+      const sessionCookie = cookies.find(c => c.name === COOKIE_NAME);
 
       if (!sessionCookie) {
         throw new Error('Session cookie not found. Please login again.');
       }
 
       console.log(`[COOKIE EXTRACT] ✓ Found session cookie`);
+
+      // Validate cookie format
+      if (!this.validateCookieFormat(sessionCookie.value)) {
+        throw new Error('Invalid cookie format');
+      }
 
       await Account.findByIdAndUpdate(accountId, {
         $set: {
@@ -129,10 +136,31 @@ class CookieWorker {
 
     } finally {
       if (browser) {
-        await browser.close();
+        try {
+          await browser.close();
+        } catch (e) {
+          // Browser already closed
+        }
       }
       this.isProcessing = false;
     }
+  }
+
+  validateCookieFormat(cookie) {
+    if (!cookie) return false;
+    if (typeof cookie !== 'string') return false;
+    
+    // Session token should start with eyJhbGci (base64 encoded JWT)
+    if (!cookie.startsWith('eyJhbGci')) return false;
+    
+    // Reasonable length check
+    if (cookie.length < 100 || cookie.length > 5000) return false;
+    
+    // Should have JWT structure (header.payload.signature)
+    const parts = cookie.split('.');
+    if (parts.length < 2) return false;
+    
+    return true;
   }
 }
 
