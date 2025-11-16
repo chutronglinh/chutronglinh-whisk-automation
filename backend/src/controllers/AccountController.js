@@ -1,5 +1,4 @@
 import Account from '../models/Account.js';
-import QueueService from '../services/QueueService.js';
 import fs from 'fs';
 
 class AccountController {
@@ -147,7 +146,10 @@ class AccountController {
         recoveryEmail: recoveryEmail || '',
         twoFASecret: twoFASecret || '',
         status: 'login-required',
-        source: 'manual'
+        source: 'manual',
+        metadata: {
+          cookieStatus: 'none'
+        }
       });
 
       return res.json({
@@ -358,19 +360,19 @@ class AccountController {
         });
       }
 
-      // Add to manual login queue
-      const job = await QueueService.addLoginJob({
-        accountId: account._id.toString(),
-        email: account.email,
-        password: account.password,
-        twoFASecret: account.twoFASecret
+      // Update account status to trigger worker pickup
+      await Account.findByIdAndUpdate(account._id, {
+        $set: { 
+          status: 'login-pending',
+          'metadata.loginRequested': new Date()
+        }
       });
 
       return res.json({
         success: true,
         data: {
-          jobId: job.id,
-          message: 'Login job queued'
+          accountId: account._id,
+          message: 'Login request queued. Worker will process shortly.'
         }
       });
     } catch (error) {
@@ -394,17 +396,19 @@ class AccountController {
         });
       }
 
-      // Add to simple login queue
-      const job = await QueueService.addSimpleLoginJob({
-        accountId: account._id.toString(),
-        email: account.email
+      // Update account status to trigger worker pickup
+      await Account.findByIdAndUpdate(account._id, {
+        $set: { 
+          status: 'simple-login-pending',
+          'metadata.simpleLoginRequested': new Date()
+        }
       });
 
       return res.json({
         success: true,
         data: {
-          jobId: job.id,
-          message: 'Simple login job queued. Browser will open for manual login.'
+          accountId: account._id,
+          message: 'Simple login request queued. Browser will open for manual login.'
         }
       });
     } catch (error) {
@@ -435,18 +439,18 @@ class AccountController {
         });
       }
 
-      // Add to cookie extraction queue
-      const job = await QueueService.addCookieJob({
-        accountId: account._id.toString(),
-        email: account.email,
-        profilePath: account.metadata.profilePath
+      // Update account status to trigger worker pickup
+      await Account.findByIdAndUpdate(account._id, {
+        $set: { 
+          'metadata.cookieExtractionRequested': new Date()
+        }
       });
 
       return res.json({
         success: true,
         data: {
-          jobId: job.id,
-          message: 'Cookie extraction job queued'
+          accountId: account._id,
+          message: 'Cookie extraction request queued'
         }
       });
     } catch (error) {
