@@ -1,120 +1,82 @@
-import { loginQueue } from '../services/QueueService.js';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { simpleLoginQueue } from '../services/QueueService.js';
+import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
 import path from 'path';
 import fs from 'fs';
-import { connectDB } from '../config/database.js';
 
-puppeteer.use(StealthPlugin());
+console.log('[SIMPLE LOGIN WORKER] Started and ready for manual logins');
 
-// Connect to MongoDB before processing jobs
-let dbConnected = false;
+const processSimpleLogin = async (job) => {
+  const { accountId } = job.data;
+  
+  console.log(`[SIMPLE LOGIN] Starting manual login process for account ${accountId}`);
 
-(async () => {
+  let browser;
   try {
-    await connectDB();
-    dbConnected = true;
-    console.log('[SIMPLE LOGIN WORKER] ✓ MongoDB connected successfully');
-  } catch (err) {
-    console.error('[SIMPLE LOGIN WORKER] ✗ MongoDB connection failed:', err);
-    process.exit(1);
-  }
-})();
+    const account = await Account.findById(accountId);
+    if (!account) {
+      throw new Error('Account not found');
+    }
 
-// Process simple manual login - user does everything
-loginQueue.process('simple-manual-login', async (job) => {
-  const { accountId, email } = job.data;
-  
-  // Wait for DB connection
-  if (!dbConnected) {
-    console.log('[SIMPLE LOGIN] Waiting for MongoDB connection...');
-    await new Promise(resolve => {
-      const checkInterval = setInterval(() => {
-        if (dbConnected) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-    });
-  }
-  
-  console.log(`[SIMPLE LOGIN] Opening browser for ${email} - User will login manually`);
-  
-  let browser = null;
-  
-  try {
+    const { email, password } = account;
+
     // Create profile directory
-    const profilePath = process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles';
-    const profileDir = path.join(profilePath, accountId);
-    
+    const profileDir = path.join(process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles', accountId);
     if (!fs.existsSync(profileDir)) {
       fs.mkdirSync(profileDir, { recursive: true });
     }
 
-    // Launch Chrome with visible UI
+    console.log(`[SIMPLE LOGIN] Opening browser for ${email} - User will login manually`);
+
+    // Launch browser with profile
     browser = await puppeteer.launch({
       headless: false,
+      executablePath: '/usr/bin/google-chrome',
+      userDataDir: profileDir,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled',
-        `--user-data-dir=${profileDir}`,
-        '--window-size=1280,720',
-        '--start-maximized'
-      ],
-      defaultViewport: null
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--window-size=1280,720'
+      ]
     });
 
     const page = await browser.newPage();
 
-    // Set user agent
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
-    // Navigate to Gmail login
-    await page.goto('https://accounts.google.com/signin/v2/identifier', {
+    // Navigate to Google login
+    await page.goto('https://accounts.google.com/', { 
       waitUntil: 'networkidle2',
-      timeout: 60000
+      timeout: 30000 
     });
 
     console.log(`[SIMPLE LOGIN] Browser opened. Waiting for user to complete login (max 10 minutes)...`);
-    
-    // Wait for user to login - detect when they reach Gmail or Google homepage
-    await Promise.race([
-      // Wait for Gmail
-      page.waitForFunction(
-        () => window.location.hostname.includes('mail.google.com'),
-        { timeout: 600000 } // 10 minutes
-      ),
-      // Or Google homepage
-      page.waitForFunction(
-        () => window.location.hostname === 'www.google.com' && 
-              !window.location.pathname.includes('signin'),
-        { timeout: 600000 }
-      ),
-      // Or any Google service logged in
-      page.waitForFunction(
-        () => {
-          const loggedIn = document.querySelector('[aria-label*="Google Account"]') !== null ||
-                          document.querySelector('[data-ogsr-up]') !== null ||
-                          document.querySelector('a[href*="SignOutOptions"]') !== null;
-          return loggedIn;
-        },
-        { timeout: 600000 }
-      )
-    ]);
+
+    // Wait for login completion - check for Google account page
+    await page.waitForFunction(
+      () => {
+        const url = window.location.href;
+        // Check if logged in (myaccount page or drive/gmail)
+        return url.includes('myaccount.google.com') || 
+               url.includes('drive.google.com') ||
+               url.includes('mail.google.com') ||
+               document.querySelector('a[href*="SignOutOptions"]') !== null;
+      },
+      { timeout: 600000 } // 10 minutes
+    );
 
     console.log(`[SIMPLE LOGIN] Login detected! Profile ready.`);
 
-    // Update account in database with retry logic
-    let updateSuccess = false;
+    await browser.close();
+
+    // Update database with retry mechanism
     let retryCount = 0;
     const maxRetries = 3;
+    let updateSuccess = false;
 
-    while (!updateSuccess && retryCount < maxRetries) {
+    while (retryCount < maxRetries && !updateSuccess) {
       try {
         await Account.findByIdAndUpdate(accountId, {
           status: 'pending',
@@ -128,20 +90,16 @@ loginQueue.process('simple-manual-login', async (job) => {
         console.log(`[SIMPLE LOGIN] Database updated for ${email}`);
       } catch (dbError) {
         retryCount++;
-        console.error(`[SIMPLE LOGIN] Database update failed (attempt ${retryCount}):`, dbError.message);
-        if (retryCount < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          throw new Error(`Failed to update database after ${maxRetries} attempts: ${dbError.message}`);
+        if (retryCount >= maxRetries) {
+          throw new Error(`Database update failed after ${maxRetries} retries: ${dbError.message}`);
         }
+        console.log(`[SIMPLE LOGIN] Database update retry ${retryCount}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
 
     console.log(`[SIMPLE LOGIN] Success! Profile ready for ${email}`);
     console.log(`[SIMPLE LOGIN] Next step: Click "Get Cookie" button to extract session cookie`);
-
-    // Keep browser open for 5 seconds
-    await page.waitForTimeout(5000);
 
     return {
       success: true,
@@ -151,9 +109,17 @@ loginQueue.process('simple-manual-login', async (job) => {
     };
 
   } catch (error) {
-    console.error(`[SIMPLE LOGIN] Error for ${email}:`, error.message);
+    console.error(`[SIMPLE LOGIN] Error for ${account?.email || accountId}:`, error.message);
 
-    // Update account status
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error(`[SIMPLE LOGIN] Error closing browser:`, closeError.message);
+      }
+    }
+
+    // Update error status
     try {
       await Account.findByIdAndUpdate(accountId, {
         status: 'error',
@@ -164,14 +130,18 @@ loginQueue.process('simple-manual-login', async (job) => {
     }
 
     throw error;
-
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
   }
+};
+
+// Process queue
+simpleLoginQueue.process(1, processSimpleLogin);
+
+simpleLoginQueue.on('completed', (job, result) => {
+  console.log(`[LOGIN QUEUE] Job ${job.id} completed:`, result);
 });
 
-console.log('[SIMPLE LOGIN WORKER] Started and ready for manual logins');
+simpleLoginQueue.on('failed', (job, error) => {
+  console.error(`[LOGIN QUEUE] Job ${job.id} failed:`, error.message);
+});
 
-export default loginQueue;
+export default simpleLoginQueue;
