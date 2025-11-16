@@ -31,9 +31,9 @@ router.get('/accounts', AccountController.getAll);
 router.get('/accounts/stats', AccountController.getStats);
 router.get('/accounts/:id', AccountController.getById);
 router.post('/accounts', AccountController.create);
+router.post('/accounts/import', upload.single('file'), AccountController.importCSV);
 router.put('/accounts/:id', AccountController.update);
 router.delete('/accounts/:id', AccountController.delete);
-router.post('/accounts/import', upload.single('file'), AccountController.importCSV);
 
 // Account actions
 router.post('/accounts/:id/manual-login', AccountController.startManualLogin);
@@ -48,9 +48,9 @@ router.get('/prompts/stats', PromptController.getStats);
 router.get('/prompts/categories', PromptController.getCategories);
 router.get('/prompts/:id', PromptController.getById);
 router.post('/prompts', PromptController.create);
+router.post('/prompts/import', PromptController.importJSON);
 router.put('/prompts/:id', PromptController.update);
 router.delete('/prompts/:id', PromptController.delete);
-router.post('/prompts/import', PromptController.importJSON);
 
 // ============================================
 // PROJECT ROUTES
