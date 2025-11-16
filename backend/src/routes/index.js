@@ -45,13 +45,12 @@ router.delete('/prompts/:id', PromptController.delete);
 // Project routes
 router.get('/projects', ProjectController.getAll);
 router.get('/projects/:id', ProjectController.getById);
-router.post('/projects', ProjectController.create);
-router.put('/projects/:id', ProjectController.update);
+router.post('/accounts/:accountId/projects', ProjectController.createForAccount);
 router.delete('/projects/:id', ProjectController.delete);
 
 // Generate routes
-router.post('/generate/start', GenerateController.start);
-router.get('/generate/status/:projectId', GenerateController.getStatus);
+router.post('/generate/start', GenerateController.startGeneration);
+router.get('/generate/status/:projectId', GenerateController.getJobStatus);
 router.get('/generate/queue-status', GenerateController.getQueueStatus);
 
 export default router;

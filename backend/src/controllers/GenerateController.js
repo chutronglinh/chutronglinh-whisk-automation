@@ -8,13 +8,6 @@ class GenerateController {
   /**
    * Start image generation job
    * POST /api/generate/start
-   * Body: {
-   *   selections: [{
-   *     accountId: string,
-   *     projectId: string,
-   *     promptIds: [string]
-   *   }]
-   * }
    */
   async startGeneration(req, res) {
     try {
@@ -260,9 +253,6 @@ class GenerateController {
         });
       }
 
-      // TODO: Delete physical file from disk
-      // fs.unlinkSync(path.join(process.env.OUTPUT_PATH, image.filename));
-
       res.json({
         success: true,
         message: 'Image deleted successfully'
@@ -371,4 +361,4 @@ class GenerateController {
   }
 }
 
-export default GenerateController;
+export default new GenerateController();

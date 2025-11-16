@@ -255,4 +255,4 @@ class PromptController {
   }
 }
 
-export default PromptController;
+export default new PromptController();
