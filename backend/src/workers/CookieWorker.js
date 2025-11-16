@@ -23,7 +23,7 @@ const processCookieExtraction = async (job) => {
 
     console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
 
-    // Launch browser với profile
+    // Launch browser with profile
     browser = await puppeteer.launch({
       headless: true,
       executablePath: '/usr/bin/google-chrome',
@@ -47,7 +47,7 @@ const processCookieExtraction = async (job) => {
       timeout: 30000 
     });
 
-    // Wait để page load
+    // Wait for page to load
     await page.waitForTimeout(3000);
 
     // Extract cookies
@@ -81,7 +81,7 @@ const processCookieExtraction = async (job) => {
 
     await browser.close();
 
-    // Update database với retry
+    // Update database with retry
     let retryCount = 0;
     const maxRetries = 3;
     let updateSuccess = false;
@@ -130,7 +130,7 @@ const processCookieExtraction = async (job) => {
       }
     }
 
-    // Update database với error status
+    // Update database with error status
     try {
       await Account.findByIdAndUpdate(accountId, {
         status: 'error',
@@ -145,8 +145,8 @@ const processCookieExtraction = async (job) => {
   }
 };
 
-// Process queue
-cookieQueue.process(2, processCookieExtraction);
+// Process queue with Bull syntax - IMPORTANT: Add job type
+cookieQueue.process('extract-cookie', 2, processCookieExtraction);
 
 cookieQueue.on('completed', (job, result) => {
   console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
