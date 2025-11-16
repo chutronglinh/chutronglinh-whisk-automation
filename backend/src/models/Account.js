@@ -27,7 +27,7 @@ const accountSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['pending', 'active', 'blocked', 'error', 'login-required'],
+    enum: ['pending', 'active', 'blocked', 'error', 'login-required', 'processing'],
     default: 'pending'
   },
   source: {
@@ -54,14 +54,10 @@ const accountSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// CRITICAL: Chỉ định nghĩa index MỘT LẦN
-// Email đã có unique: true ở trên, không cần index lại
-// accountSchema.index({ email: 1 }); // ← XÓA DÒNG NÀY NẾU CÓ
-
 // Index cho queries
 accountSchema.index({ status: 1 });
 accountSchema.index({ source: 1 });
-accountSchema.index({ email: 1, status: 1 }); // Compound index
+accountSchema.index({ email: 1, status: 1 });
 
 const Account = mongoose.model('Account', accountSchema);
 
