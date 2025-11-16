@@ -1,7 +1,7 @@
 import Account from '../models/Account.js';
 import csv from 'csv-parser';
 import fs from 'fs';
-import { loginQueue } from '../services/QueueService.js';
+import { loginQueue, cookieQueue } from '../services/QueueService.js';
 
 class AccountController {
   // Get all accounts
@@ -221,7 +221,7 @@ class AccountController {
     }
   }
 
-  // Start simple login (100% manual) - MỚI
+  // Start simple login (100% manual)
   async startSimpleLogin(req, res) {
     try {
       const { id } = req.params;
@@ -246,7 +246,55 @@ class AccountController {
       res.json({
         success: true,
         jobId: job.id,
-        message: 'Chrome will open on server. Please login manually in the browser window.'
+        message: 'Chrome will open on server. Please login manually.'
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  // Extract cookie from logged-in profile - MỚI
+  async extractCookie(req, res) {
+    try {
+      const { id } = req.params;
+      const account = await Account.findById(id);
+
+      if (!account) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Account not found' 
+        });
+      }
+
+      if (!account.metadata?.profilePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Profile not found. Please login first.' 
+        });
+      }
+
+      if (!account.metadata?.profileReady) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Profile not ready. Please login first.' 
+        });
+      }
+
+      // Add job to cookie extraction queue
+      const job = await cookieQueue.add('extract-cookie', {
+        accountId: account._id.toString()
+      });
+
+      account.status = 'processing';
+      await account.save();
+
+      res.json({
+        success: true,
+        jobId: job.id,
+        message: 'Extracting session cookie from Whisk...'
       });
     } catch (error) {
       res.status(500).json({ 

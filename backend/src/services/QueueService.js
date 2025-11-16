@@ -1,5 +1,4 @@
 import Queue from 'bull';
-import Redis from 'ioredis';
 
 // Redis connection
 const redisConfig = {
@@ -25,11 +24,29 @@ export const loginQueue = new Queue('manual-login', {
 });
 
 export const cookieQueue = new Queue('cookie-extraction', {
-  redis: redisConfig
+  redis: redisConfig,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000
+    },
+    removeOnComplete: 100,
+    removeOnFail: 100
+  }
 });
 
 export const imageQueue = new Queue('image-generation', {
-  redis: redisConfig
+  redis: redisConfig,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000
+    },
+    removeOnComplete: 100,
+    removeOnFail: 100
+  }
 });
 
 // Queue event handlers
@@ -43,6 +60,26 @@ loginQueue.on('failed', (job, err) => {
 
 loginQueue.on('stalled', (job) => {
   console.warn(`[LOGIN QUEUE] Job ${job.id} stalled`);
+});
+
+cookieQueue.on('completed', (job, result) => {
+  console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
+});
+
+cookieQueue.on('failed', (job, err) => {
+  console.error(`[COOKIE QUEUE] Job ${job.id} failed:`, err.message);
+});
+
+cookieQueue.on('stalled', (job) => {
+  console.warn(`[COOKIE QUEUE] Job ${job.id} stalled`);
+});
+
+imageQueue.on('completed', (job, result) => {
+  console.log(`[IMAGE QUEUE] Job ${job.id} completed:`, result);
+});
+
+imageQueue.on('failed', (job, err) => {
+  console.error(`[IMAGE QUEUE] Job ${job.id} failed:`, err.message);
 });
 
 export default {

@@ -24,7 +24,7 @@ loginQueue.process('simple-manual-login', async (job) => {
       fs.mkdirSync(profileDir, { recursive: true });
     }
 
-    // Launch Chrome with visible UI - NO automation
+    // Launch Chrome with visible UI
     browser = await puppeteer.launch({
       headless: false,
       args: [
@@ -46,7 +46,7 @@ loginQueue.process('simple-manual-login', async (job) => {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    // Just navigate to Gmail login - user does the rest
+    // Navigate to Gmail login
     await page.goto('https://accounts.google.com/signin/v2/identifier', {
       waitUntil: 'networkidle2',
       timeout: 60000
@@ -79,17 +79,7 @@ loginQueue.process('simple-manual-login', async (job) => {
       )
     ]);
 
-    console.log(`[SIMPLE LOGIN] Login detected! Extracting cookies...`);
-
-    // Wait a bit for all cookies to be set
-    await page.waitForTimeout(3000);
-
-    // Extract cookies
-    const cookies = await page.cookies();
-    
-    if (cookies.length === 0) {
-      throw new Error('No cookies found after login');
-    }
+    console.log(`[SIMPLE LOGIN] Login detected! Profile ready.`);
 
     // Update account in database with retry logic
     let updateSuccess = false;
@@ -99,13 +89,12 @@ loginQueue.process('simple-manual-login', async (job) => {
     while (!updateSuccess && retryCount < maxRetries) {
       try {
         await Account.findByIdAndUpdate(accountId, {
-          cookies: cookies,
-          status: 'active',
+          status: 'pending', // Not active yet - need to extract cookie
           lastLogin: new Date(),
-          lastCookieUpdate: new Date(),
           loginAttempts: 0,
           'metadata.userAgent': await page.evaluate(() => navigator.userAgent),
-          'metadata.profilePath': profileDir
+          'metadata.profilePath': profileDir,
+          'metadata.profileReady': true // Profile is ready for cookie extraction
         });
         updateSuccess = true;
         console.log(`[SIMPLE LOGIN] Database updated for ${email}`);
@@ -120,17 +109,17 @@ loginQueue.process('simple-manual-login', async (job) => {
       }
     }
 
-    console.log(`[SIMPLE LOGIN] Success! ${cookies.length} cookies saved for ${email}`);
+    console.log(`[SIMPLE LOGIN] Success! Profile ready for ${email}`);
+    console.log(`[SIMPLE LOGIN] Next step: Click "Get Cookie" button to extract session cookie`);
 
-    // Keep browser open for 10 seconds so user can see success
-    await page.waitForTimeout(10000);
+    // Keep browser open for 5 seconds
+    await page.waitForTimeout(5000);
 
     return {
       success: true,
       email,
-      cookiesCount: cookies.length,
       profilePath: profileDir,
-      message: 'Manual login successful, cookies extracted'
+      message: 'Login successful. Profile ready. Please click "Get Cookie" to extract session cookie.'
     };
 
   } catch (error) {

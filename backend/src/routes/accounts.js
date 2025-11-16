@@ -23,8 +23,9 @@ router.get('/stats', AccountController.getStats);
 router.get('/:id', AccountController.getById);
 router.post('/', AccountController.create);
 router.post('/import-csv', upload.single('file'), AccountController.importCSV);
-router.post('/:id/manual-login', AccountController.startManualLogin); // Auto login
-router.post('/:id/simple-login', AccountController.startSimpleLogin); // MỚI - Manual login
+router.post('/:id/manual-login', AccountController.startManualLogin);
+router.post('/:id/simple-login', AccountController.startSimpleLogin);
+router.post('/:id/extract-cookie', AccountController.extractCookie); // MỚI
 router.put('/:id', AccountController.update);
 router.delete('/:id', AccountController.delete);
 

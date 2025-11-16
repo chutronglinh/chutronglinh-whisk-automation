@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Upload, Download, Trash2, LogIn, Plus, RefreshCw, User } from 'lucide-react';
+import { Upload, Download, Trash2, User, Plus, RefreshCw, Key } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
@@ -98,20 +98,6 @@ export default function Accounts() {
     }
   };
 
-  // Auto login - tự động điền email/password
-  const handleAutoLogin = async (accountId) => {
-    try {
-      const res = await axios.post(`${API_BASE}/accounts/${accountId}/manual-login`);
-      toast.success(res.data.message || 'Chrome will open with auto-filled credentials');
-      
-      setTimeout(() => {
-        loadAccounts();
-      }, 3000);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to start auto login');
-    }
-  };
-
   // Simple login - 100% thủ công
   const handleSimpleLogin = async (accountId) => {
     try {
@@ -123,6 +109,20 @@ export default function Accounts() {
       }, 3000);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to start manual login');
+    }
+  };
+
+  // Extract cookie - MỚI
+  const handleExtractCookie = async (accountId) => {
+    try {
+      const res = await axios.post(`${API_BASE}/accounts/${accountId}/extract-cookie`);
+      toast.success(res.data.message || 'Extracting session cookie...');
+      
+      setTimeout(() => {
+        loadAccounts();
+      }, 5000);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to extract cookie');
     }
   };
 
@@ -172,7 +172,7 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
           <h1 className="text-3xl font-bold">Accounts</h1>
           <p className="text-gray-600 mt-1">
             Total: {stats.total || 0} | Active: {stats.byStatus?.active || 0} | 
-            Login Required: {stats.byStatus?.['login-required'] || 0}
+            Pending: {stats.byStatus?.pending || 0}
           </p>
         </div>
         
@@ -316,27 +316,30 @@ example2@gmail.com,Password456,recovery@gmail.com,SECRETKEY456`;
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex gap-2">
+                    {/* Login button - for login-required and error status */}
                     {(acc.status === 'login-required' || acc.status === 'error') && (
-                      <>
-                        <button 
-                          onClick={() => handleAutoLogin(acc._id)}
-                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                          title="Auto Login (auto-fill email/password)"
-                        >
-                          <LogIn className="w-4 h-4" />
-                          Auto
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleSimpleLogin(acc._id)}
-                          className="text-green-600 hover:text-green-800 flex items-center gap-1"
-                          title="Manual Login (you fill everything manually)"
-                        >
-                          <User className="w-4 h-4" />
-                          Manual
-                        </button>
-                      </>
+                      <button 
+                        onClick={() => handleSimpleLogin(acc._id)}
+                        className="text-green-600 hover:text-green-800 flex items-center gap-1"
+                        title="Manual Login"
+                      >
+                        <User className="w-4 h-4" />
+                        Login
+                      </button>
                     )}
+                    
+                    {/* Get Cookie button - only show if profile is ready */}
+                    {acc.status === 'pending' && acc.metadata?.profileReady && (
+                      <button 
+                        onClick={() => handleExtractCookie(acc._id)}
+                        className="text-purple-600 hover:text-purple-800 flex items-center gap-1"
+                        title="Extract Session Cookie"
+                      >
+                        <Key className="w-4 h-4" />
+                        Get Cookie
+                      </button>
+                    )}
+                    
                     <button 
                       onClick={() => handleDelete(acc._id)}
                       className="text-red-600 hover:text-red-800"
