@@ -27,7 +27,7 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
@@ -47,7 +47,7 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
@@ -67,7 +67,7 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
