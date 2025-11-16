@@ -20,8 +20,10 @@ const processSimpleLogin = async (job) => {
   console.log(`[SIMPLE LOGIN] Starting manual login process for account ${accountId}`);
 
   let browser;
+  let account;  // Khai báo ở ngoài try để catch block có thể truy cập
+
   try {
-    const account = await Account.findById(accountId);
+    account = await Account.findById(accountId);
     if (!account) {
       throw new Error('Account not found');
     }
