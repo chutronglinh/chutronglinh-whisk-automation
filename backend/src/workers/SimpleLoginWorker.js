@@ -1,162 +1,262 @@
-import { simpleLoginQueue } from '../services/QueueService.js';
 import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
-import mongoose from 'mongoose';
+import { connectDB } from '../config/database.js';
+import Bull from 'bull';
 import path from 'path';
 import fs from 'fs';
 
-// Connect to MongoDB
-if (mongoose.connection.readyState === 0) {
-  mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/whisk-automation')
-    .then(() => console.log('[SIMPLE LOGIN WORKER] ✓ MongoDB connected'))
-    .catch(err => console.error('[SIMPLE LOGIN WORKER] ✗ MongoDB error:', err));
-}
-
-console.log('[SIMPLE LOGIN WORKER] Started and ready for manual logins');
-
-const processSimpleLogin = async (job) => {
-  const { accountId } = job.data;
-  
-  console.log(`[SIMPLE LOGIN] Starting manual login process for account ${accountId}`);
-
-  let browser;
-  let account;
-
-  try {
-    account = await Account.findById(accountId);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-
-    const { email } = account;
-
-    // Create profile directory
-    const profileDir = path.join(process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles', accountId);
-    if (!fs.existsSync(profileDir)) {
-      fs.mkdirSync(profileDir, { recursive: true });
-    }
-
-    console.log(`[SIMPLE LOGIN] Opening browser for ${email} - User will login manually`);
-
-    // Launch browser with profile - Use Google Chrome
-    browser = await puppeteer.launch({
-      headless: false,
-      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
-      userDataDir: profileDir,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--window-size=1280,720'
-      ]
-    });
-
-    const page = await browser.newPage();
-
-    // Navigate to Whisk (not Google accounts page)
-    // Whisk will redirect to Google login automatically
-    await page.goto('https://labs.google/fx/tools/whisk', { 
-      waitUntil: 'networkidle2',
-      timeout: 30000 
-    });
-
-    console.log(`[SIMPLE LOGIN] Browser opened. Waiting for user to complete login (max 10 minutes)...`);
-
-    // Wait for login completion - check for Whisk page after authentication
-    await page.waitForFunction(
-      () => {
-        const url = window.location.href;
-        // Check if logged in to Whisk (not on signin page)
-        return url.includes('labs.google/fx/tools/whisk') && 
-               !url.includes('signin') &&
-               !url.includes('accounts.google.com') &&
-               !url.includes('ServiceLogin');
-      },
-      { timeout: 600000 } // 10 minutes
-    );
-
-    console.log(`[SIMPLE LOGIN] Login detected! Whisk authenticated. Profile ready.`);
-
-    // Get user agent
-    const userAgent = await page.evaluate(() => navigator.userAgent);
-
-    await browser.close();
-
-    // Update database with retry mechanism
-    let retryCount = 0;
-    const maxRetries = 3;
-    let updateSuccess = false;
-
-    while (retryCount < maxRetries && !updateSuccess) {
-      try {
-        await Account.findByIdAndUpdate(accountId, {
-          status: 'pending',
-          lastLogin: new Date(),
-          loginAttempts: 0,
-          'metadata.userAgent': userAgent,
-          'metadata.profilePath': profileDir,
-          'metadata.profileReady': true,
-          'metadata.whiskAuthenticated': true
-        });
-        updateSuccess = true;
-        console.log(`[SIMPLE LOGIN] Database updated for ${email}`);
-      } catch (dbError) {
-        retryCount++;
-        if (retryCount >= maxRetries) {
-          throw new Error(`Database update failed after ${maxRetries} retries: ${dbError.message}`);
-        }
-        console.log(`[SIMPLE LOGIN] Database update retry ${retryCount}/${maxRetries}`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-      }
-    }
-
-    console.log(`[SIMPLE LOGIN] Success! Whisk profile ready for ${email}`);
-    console.log(`[SIMPLE LOGIN] Next step: Click "Get Cookie" button to extract session cookie`);
-
-    return {
-      success: true,
-      email,
-      profilePath: profileDir,
-      message: 'Login successful. Whisk authenticated. Please click "Get Cookie" to extract session cookie.'
-    };
-
-  } catch (error) {
-    console.error(`[SIMPLE LOGIN] Error for ${account?.email || accountId}:`, error.message);
-
-    if (browser) {
-      try {
-        await browser.close();
-      } catch (closeError) {
-        console.error(`[SIMPLE LOGIN] Error closing browser:`, closeError.message);
-      }
-    }
-
-    // Update error status
-    try {
-      await Account.findByIdAndUpdate(accountId, {
-        status: 'error',
-        $inc: { loginAttempts: 1 }
-      });
-    } catch (dbError) {
-      console.error(`[SIMPLE LOGIN] Failed to update error status:`, dbError.message);
-    }
-
-    throw error;
-  }
+// Redis config
+const REDIS_CONFIG = {
+  host: process.env.REDIS_HOST || 'localhost',
+  port: process.env.REDIS_PORT || 6379,
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false
 };
 
-// Process queue
-simpleLoginQueue.process(1, processSimpleLogin);
-
-simpleLoginQueue.on('completed', (job, result) => {
-  console.log(`[LOGIN QUEUE] Job ${job.id} completed:`, result);
+// Create queue
+const simpleLoginQueue = new Bull('simple-login', {
+  redis: REDIS_CONFIG,
+  defaultJobOptions: {
+    attempts: 1,
+    removeOnComplete: true,
+    removeOnFail: false
+  }
 });
 
-simpleLoginQueue.on('failed', (job, error) => {
-  console.error(`[LOGIN QUEUE] Job ${job.id} failed:`, error.message);
-});
+// Profile base path
+const PROFILE_BASE_PATH = process.env.PROFILE_PATH || '/opt/whisk-automation/data/profiles';
 
-export default simpleLoginQueue;
+class SimpleLoginWorker {
+  constructor() {
+    this.isProcessing = false;
+  }
+
+  async init() {
+    try {
+      await connectDB();
+      console.log('[SIMPLE LOGIN WORKER] Started and ready for manual logins');
+      console.log('[SIMPLE LOGIN WORKER] ✓ MongoDB connected');
+      
+      // Ensure profile directory exists
+      if (!fs.existsSync(PROFILE_BASE_PATH)) {
+        fs.mkdirSync(PROFILE_BASE_PATH, { recursive: true });
+        console.log('[SIMPLE LOGIN WORKER] Created profile directory:', PROFILE_BASE_PATH);
+      }
+
+      this.startProcessing();
+    } catch (error) {
+      console.error('[SIMPLE LOGIN WORKER] Init error:', error);
+      process.exit(1);
+    }
+  }
+
+  startProcessing() {
+    // Process jobs from queue
+    simpleLoginQueue.process(async (job) => {
+      return this.processSimpleLogin(job.data);
+    });
+
+    // Also poll database for pending accounts
+    setInterval(() => this.pollPendingAccounts(), 10000);
+
+    // Queue event listeners
+    simpleLoginQueue.on('completed', (job, result) => {
+      console.log(`[SIMPLE LOGIN QUEUE] Job ${job.id} completed:`, result);
+    });
+
+    simpleLoginQueue.on('failed', (job, err) => {
+      console.error(`[SIMPLE LOGIN QUEUE] Job ${job.id} failed:`, err.message);
+    });
+
+    simpleLoginQueue.on('stalled', (job) => {
+      console.warn(`[SIMPLE LOGIN QUEUE] Job ${job.id} stalled`);
+    });
+  }
+
+  async pollPendingAccounts() {
+    if (this.isProcessing) return;
+
+    try {
+      const pendingAccount = await Account.findOne({
+        status: 'simple-login-pending'
+      }).sort({ 'metadata.simpleLoginRequested': 1 });
+
+      if (pendingAccount) {
+        console.log('[SIMPLE LOGIN WORKER] Found pending account:', pendingAccount.email);
+        await this.processSimpleLogin({
+          accountId: pendingAccount._id.toString(),
+          email: pendingAccount.email
+        });
+      }
+    } catch (error) {
+      console.error('[SIMPLE LOGIN WORKER] Poll error:', error);
+    }
+  }
+
+  async processSimpleLogin(data) {
+    const { accountId, email } = data;
+    this.isProcessing = true;
+
+    let browser = null;
+    const profilePath = path.join(PROFILE_BASE_PATH, accountId);
+
+    try {
+      console.log(`[SIMPLE LOGIN] Starting manual login for ${email}`);
+      console.log(`[SIMPLE LOGIN] Profile path: ${profilePath}`);
+
+      // Create profile directory if not exists
+      if (!fs.existsSync(profilePath)) {
+        fs.mkdirSync(profilePath, { recursive: true });
+        console.log(`[SIMPLE LOGIN] Created profile directory for ${email}`);
+      }
+
+      // Update account status
+      await Account.findByIdAndUpdate(accountId, {
+        $set: {
+          status: 'simple-login-pending',
+          'metadata.loginStarted': new Date()
+        }
+      });
+
+      // Launch browser with DISPLAY for Ubuntu Desktop
+      console.log(`[SIMPLE LOGIN] Launching browser with DISPLAY=${process.env.DISPLAY || ':0'}`);
+      
+      browser = await puppeteer.launch({
+        headless: false, // MUST be false to show on screen
+        executablePath: '/usr/bin/google-chrome',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-blink-features=AutomationControlled',
+          '--start-maximized',
+          '--disable-infobars',
+          '--window-size=1920,1080',
+          `--display=${process.env.DISPLAY || ':0'}` // Force display
+        ],
+        userDataDir: profilePath,
+        defaultViewport: null
+      });
+
+      const page = await browser.newPage();
+
+      // Navigate to Whisk login
+      console.log('[SIMPLE LOGIN] Navigating to Whisk...');
+      await page.goto('https://labs.google.com/search/whisk', {
+        waitUntil: 'networkidle2',
+        timeout: 60000
+      });
+
+      // Wait a bit for page to load
+      await page.waitForTimeout(3000);
+
+      console.log(`[SIMPLE LOGIN] Browser opened for ${email}`);
+      console.log('[SIMPLE LOGIN] Waiting for user to complete login manually...');
+      console.log('[SIMPLE LOGIN] Browser will stay open until user completes login or closes it');
+
+      // Wait for user to login (check for session cookie)
+      let loginCompleted = false;
+      let checkCount = 0;
+      const maxChecks = 180; // 15 minutes (180 * 5 seconds)
+
+      while (!loginCompleted && checkCount < maxChecks) {
+        await page.waitForTimeout(5000);
+        checkCount++;
+
+        try {
+          // Check if login completed by looking for session cookie
+          const cookies = await page.cookies();
+          const sessionCookie = cookies.find(c => 
+            c.name === '__Secure-1PSID' || 
+            c.name === '__Secure-3PSID' ||
+            c.domain.includes('google.com')
+          );
+
+          if (sessionCookie) {
+            console.log(`[SIMPLE LOGIN] ✓ Login detected for ${email}!`);
+            loginCompleted = true;
+
+            // Save cookies to database
+            await Account.findByIdAndUpdate(accountId, {
+              $set: {
+                status: 'active',
+                sessionCookie: sessionCookie.value,
+                cookies: cookies,
+                lastCookieUpdate: new Date(),
+                'metadata.profilePath': profilePath,
+                'metadata.profileReady': true,
+                'metadata.cookieStatus': 'active',
+                'metadata.loginCompleted': new Date()
+              }
+            });
+
+            console.log(`[SIMPLE LOGIN] ✓ Cookies saved for ${email}`);
+          }
+        } catch (error) {
+          // Continue checking
+        }
+
+        // Check if browser is still open
+        if (!browser.isConnected()) {
+          console.log(`[SIMPLE LOGIN] Browser closed for ${email}`);
+          break;
+        }
+      }
+
+      if (!loginCompleted && checkCount >= maxChecks) {
+        console.log(`[SIMPLE LOGIN] Timeout waiting for login completion for ${email}`);
+        await Account.findByIdAndUpdate(accountId, {
+          $set: {
+            status: 'login-required',
+            'metadata.loginTimeout': new Date()
+          }
+        });
+      }
+
+      if (!loginCompleted && browser.isConnected()) {
+        // User closed browser without completing login
+        await Account.findByIdAndUpdate(accountId, {
+          $set: {
+            status: 'login-required',
+            'metadata.loginCancelled': new Date()
+          }
+        });
+      }
+
+      return {
+        success: loginCompleted,
+        email,
+        message: loginCompleted ? 'Login completed successfully' : 'Login not completed'
+      };
+
+    } catch (error) {
+      console.error(`[SIMPLE LOGIN] Error for ${email}:`, error.message);
+
+      await Account.findByIdAndUpdate(accountId, {
+        $set: {
+          status: 'login-required',
+          'metadata.lastError': error.message,
+          'metadata.lastErrorTime': new Date()
+        }
+      });
+
+      throw error;
+
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (e) {
+          // Browser already closed
+        }
+      }
+      this.isProcessing = false;
+    }
+  }
+}
+
+// Start worker
+const worker = new SimpleLoginWorker();
+worker.init();
+
+export default worker;

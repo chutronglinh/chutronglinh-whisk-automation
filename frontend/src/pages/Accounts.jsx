@@ -1,12 +1,4 @@
 import { useState, useEffect } from 'react';
-import { 
-  UserIcon, 
-  ArrowPathIcon, 
-  TrashIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon
-} from '@heroicons/react/24/outline';
 
 const API_BASE = '/api';
 
@@ -23,11 +15,18 @@ export default function Accounts() {
   useEffect(() => {
     fetchAccounts();
     fetchStats();
+    
+    // Auto refresh every 5 seconds
+    const interval = setInterval(() => {
+      fetchAccounts();
+      fetchStats();
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchAccounts = async () => {
     try {
-      setLoading(true);
       const response = await fetch(`${API_BASE}/accounts`);
       const data = await response.json();
       
@@ -36,7 +35,6 @@ export default function Accounts() {
       }
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
-      alert('Failed to fetch accounts: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -115,6 +113,10 @@ export default function Accounts() {
   };
 
   const handleSimpleLogin = async (accountId) => {
+    if (!confirm('⚠️ This will open a browser window on the SERVER.\n\nMake sure you have access to the server desktop (via Remote Desktop/VNC).\n\nContinue?')) {
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/accounts/${accountId}/simple-login`, {
         method: 'POST'
@@ -123,7 +125,10 @@ export default function Accounts() {
       const data = await response.json();
       
       if (data.success) {
-        alert('✅ ' + data.data.message);
+        alert('✅ Browser opened on server!\n\n' + 
+              'Please go to the server desktop and complete the login manually.\n' + 
+              'The browser window should be visible on the server screen.\n\n' +
+              data.data.message);
         fetchAccounts();
       } else {
         throw new Error(data.error);
@@ -143,8 +148,9 @@ export default function Accounts() {
       const data = await response.json();
       
       if (data.success) {
-        alert('✅ ' + data.data.message);
+        alert('✅ Cookie extraction started!\n\n' + data.data.message);
         fetchAccounts();
+        fetchStats();
       } else {
         throw new Error(data.error);
       }
@@ -181,39 +187,17 @@ export default function Accounts() {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      'active': { 
-        color: 'bg-green-100 text-green-800', 
-        icon: CheckCircleIcon, 
-        text: 'Active' 
-      },
-      'login-required': { 
-        color: 'bg-yellow-100 text-yellow-800', 
-        icon: ClockIcon, 
-        text: 'Login Required' 
-      },
-      'suspended': { 
-        color: 'bg-red-100 text-red-800', 
-        icon: XCircleIcon, 
-        text: 'Suspended' 
-      },
-      'login-pending': { 
-        color: 'bg-blue-100 text-blue-800', 
-        icon: ClockIcon, 
-        text: 'Login Pending' 
-      },
-      'simple-login-pending': { 
-        color: 'bg-purple-100 text-purple-800', 
-        icon: ClockIcon, 
-        text: 'Simple Login Pending' 
-      }
+      'active': { color: 'bg-green-100 text-green-800', text: '✅ Active' },
+      'login-required': { color: 'bg-yellow-100 text-yellow-800', text: '⏳ Login Required' },
+      'suspended': { color: 'bg-red-100 text-red-800', text: '❌ Suspended' },
+      'login-pending': { color: 'bg-blue-100 text-blue-800', text: '⏳ Login Pending' },
+      'simple-login-pending': { color: 'bg-purple-100 text-purple-800', text: '🔓 Simple Login Pending' }
     };
 
     const config = statusConfig[status] || statusConfig['login-required'];
-    const Icon = config.icon;
 
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-        <Icon className="w-4 h-4 mr-1" />
         {config.text}
       </span>
     );
@@ -234,9 +218,14 @@ export default function Accounts() {
     return date.toLocaleDateString();
   };
 
+  const showGetCookieButton = (account) => {
+    // Show if: profile ready OR status is active, AND no cookie yet
+    return (account.metadata?.profileReady || account.status === 'active') && 
+           !account.sessionCookie;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
@@ -250,69 +239,44 @@ export default function Accounts() {
             onClick={fetchAccounts}
             className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
-            <ArrowPathIcon className="w-4 h-4 mr-2" />
-            Refresh
+            🔄 Refresh
           </button>
           
           <label className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer">
-            {isImporting ? (
-              <>
-                <ArrowPathIcon className="w-4 h-4 mr-2 animate-spin" />
-                Importing...
-              </>
-            ) : (
-              <>
-                Import CSV
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  disabled={isImporting}
-                />
-              </>
-            )}
+            {isImporting ? '⏳ Importing...' : '📤 Import CSV'}
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={isImporting}
+            />
           </label>
         </div>
       </div>
 
-      {/* Accounts Table */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         {loading ? (
           <div className="text-center py-12">
-            <ArrowPathIcon className="w-8 h-8 mx-auto text-gray-400 animate-spin" />
+            <p className="text-2xl">⏳</p>
             <p className="mt-2 text-sm text-gray-500">Loading accounts...</p>
           </div>
         ) : accounts.length === 0 ? (
           <div className="text-center py-12">
-            <UserIcon className="w-12 h-12 mx-auto text-gray-400" />
+            <p className="text-4xl">👥</p>
             <p className="mt-2 text-sm text-gray-500">No accounts yet. Import CSV to get started.</p>
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cookie Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Cookie Update
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  2FA
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Source
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cookie Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Cookie Update</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">2FA</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -325,54 +289,56 @@ export default function Accounts() {
                     {getStatusBadge(account.status)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {account.metadata?.cookieStatus === 'active' ? (
+                    {account.sessionCookie ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircleIcon className="w-4 h-4 mr-1" />
-                        Active
+                        ✅ Active
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        No Cookie
+                        ❌ No Cookie
                       </span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(account.lastCookieUpdate)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {account.twoFASecret ? (
-                      <CheckCircleIcon className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircleIcon className="w-5 h-5 text-gray-300" />
-                    )}
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    {account.twoFASecret ? '✅' : '❌'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {account.source || 'manual'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-3">
+                      {/* Login button - only show if login required */}
                       {account.status === 'login-required' && (
                         <button
                           onClick={() => handleSimpleLogin(account._id)}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-blue-600 hover:text-blue-900 font-medium"
+                          title="Open browser on server for manual login"
                         >
                           Login
                         </button>
                       )}
-                      {account.metadata?.profileReady && !account.sessionCookie && (
+                      
+                      {/* Get Cookie button - show if profile ready but no cookie */}
+                      {showGetCookieButton(account) && (
                         <button
                           onClick={() => handleExtractCookie(account._id)}
-                          className="text-green-600 hover:text-green-900"
+                          className="text-green-600 hover:text-green-900 font-medium"
+                          title="Extract cookie from logged-in profile"
                         >
                           Get Cookie
                         </button>
                       )}
+                      
+                      {/* Delete button - always show */}
                       <button
                         onClick={() => handleDelete(account._id)}
                         className="text-red-600 hover:text-red-900"
                         title="Delete account"
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        🗑️
                       </button>
                     </div>
                   </td>

@@ -1,165 +1,184 @@
-import { cookieQueue } from '../services/QueueService.js';
 import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
-import mongoose from 'mongoose';
+import { connectDB } from '../config/database.js';
+import Bull from 'bull';
+import fs from 'fs';
 
-// Connect to MongoDB
-if (mongoose.connection.readyState === 0) {
-  mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/whisk-automation')
-    .then(() => console.log('[COOKIE WORKER] ✓ MongoDB connected'))
-    .catch(err => console.error('[COOKIE WORKER] ✗ MongoDB error:', err));
-}
-
-console.log('[COOKIE WORKER] Started and ready to extract cookies');
-
-const processCookieExtraction = async (job) => {
-  const { accountId } = job.data;
-  
-  console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
-
-  let browser;
-  try {
-    const account = await Account.findById(accountId);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-
-    const profilePath = account.metadata?.profilePath;
-    if (!profilePath) {
-      throw new Error('Profile path not found');
-    }
-
-    console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
-
-    // Launch browser with profile - Use Google Chrome
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
-      userDataDir: profilePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote'
-      ]
-    });
-
-    const page = await browser.newPage();
-
-    // Navigate to Whisk
-    console.log(`[COOKIE EXTRACT] Navigating to Whisk...`);
-    await page.goto('https://labs.google/fx/tools/whisk', { 
-      waitUntil: 'networkidle2',
-      timeout: 30000 
-    });
-
-    // Wait for page to load
-    await page.waitForTimeout(3000);
-
-    // Extract cookies
-    const cookies = await page.cookies();
-    const sessionCookie = cookies.find(c => 
-      c.name === '__Secure-1PSID' || 
-      c.name === 'SID' ||
-      c.name.includes('session')
-    );
-
-    if (!sessionCookie) {
-      throw new Error('Session cookie not found. Please login first.');
-    }
-
-    console.log(`[COOKIE EXTRACT] Cookie found: ${sessionCookie.value.substring(0, 50)}...`);
-
-    // Validate cookie
-    console.log(`[COOKIE EXTRACT] Validating cookie...`);
-    const response = await page.goto('https://labs.google/fx/tools/whisk', {
-      waitUntil: 'networkidle2',
-      timeout: 15000
-    });
-
-    if (!response || response.status() !== 200) {
-      throw new Error('Cookie validation failed. May be expired.');
-    }
-
-    console.log(`[COOKIE EXTRACT] Cookie validated successfully`);
-
-    await browser.close();
-
-    // Update database with retry
-    let retryCount = 0;
-    const maxRetries = 3;
-    let updateSuccess = false;
-
-    while (retryCount < maxRetries && !updateSuccess) {
-      try {
-        await Account.findByIdAndUpdate(accountId, {
-          sessionCookie: sessionCookie.value,
-          cookies: cookies,
-          status: 'active',
-          lastCookieUpdate: new Date(),
-          'metadata.cookieExtracted': true,
-          'metadata.cookieValidated': true,
-          'metadata.cookieStatus': 'active',
-          'metadata.cookieError': null
-        });
-        updateSuccess = true;
-        console.log(`[COOKIE EXTRACT] Database updated`);
-      } catch (dbError) {
-        retryCount++;
-        if (retryCount >= maxRetries) {
-          throw new Error(`Database update failed after ${maxRetries} retries: ${dbError.message}`);
-        }
-        console.log(`[COOKIE EXTRACT] Database update retry ${retryCount}/${maxRetries}`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-      }
-    }
-
-    console.log(`[COOKIE EXTRACT] Success for ${account.email}`);
-
-    return {
-      success: true,
-      email: account.email,
-      cookieLength: sessionCookie.value.length,
-      validated: true
-    };
-
-  } catch (error) {
-    console.error(`[COOKIE EXTRACT] Error:`, error.message);
-
-    if (browser) {
-      try {
-        await browser.close();
-      } catch (closeError) {
-        console.error(`[COOKIE EXTRACT] Error closing browser:`, closeError.message);
-      }
-    }
-
-    // Update database with error status
-    try {
-      await Account.findByIdAndUpdate(accountId, {
-        status: 'error',
-        'metadata.cookieStatus': 'failed',
-        'metadata.cookieError': error.message
-      });
-    } catch (dbError) {
-      console.error(`[COOKIE EXTRACT] Failed to update error status:`, dbError.message);
-    }
-
-    throw error;
-  }
+// Redis config
+const REDIS_CONFIG = {
+  host: process.env.REDIS_HOST || 'localhost',
+  port: process.env.REDIS_PORT || 6379,
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false
 };
 
-// Process queue with Bull syntax
-cookieQueue.process('extract-cookie', 2, processCookieExtraction);
-
-cookieQueue.on('completed', (job, result) => {
-  console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
+// Create queue
+const cookieQueue = new Bull('cookie-extraction', {
+  redis: REDIS_CONFIG,
+  defaultJobOptions: {
+    attempts: 1,
+    removeOnComplete: true,
+    removeOnFail: false
+  }
 });
 
-cookieQueue.on('failed', (job, error) => {
-  console.error(`[COOKIE QUEUE] Job ${job.id} failed:`, error.message);
-});
+class CookieWorker {
+  constructor() {
+    this.isProcessing = false;
+  }
 
-export default cookieQueue;
+  async init() {
+    try {
+      await connectDB();
+      console.log('[COOKIE WORKER] Started and ready');
+      console.log('[COOKIE WORKER] ✓ MongoDB connected');
+
+      this.startProcessing();
+    } catch (error) {
+      console.error('[COOKIE WORKER] Init error:', error);
+      process.exit(1);
+    }
+  }
+
+  startProcessing() {
+    // Process jobs from queue
+    cookieQueue.process(async (job) => {
+      return this.extractCookie(job.data);
+    });
+
+    // Poll database for pending extractions
+    setInterval(() => this.pollPendingExtractions(), 10000);
+
+    // Queue event listeners
+    cookieQueue.on('completed', (job, result) => {
+      console.log(`[COOKIE QUEUE] Job ${job.id} completed:`, result);
+    });
+
+    cookieQueue.on('failed', (job, err) => {
+      console.error(`[COOKIE QUEUE] Job ${job.id} failed:`, err.message);
+    });
+  }
+
+  async pollPendingExtractions() {
+    if (this.isProcessing) return;
+
+    try {
+      const pendingAccount = await Account.findOne({
+        'metadata.cookieExtractionRequested': { $exists: true },
+        'metadata.profileReady': true
+      }).sort({ 'metadata.cookieExtractionRequested': 1 });
+
+      if (pendingAccount) {
+        console.log('[COOKIE WORKER] Found pending extraction:', pendingAccount.email);
+        await this.extractCookie({
+          accountId: pendingAccount._id.toString(),
+          email: pendingAccount.email,
+          profilePath: pendingAccount.metadata.profilePath
+        });
+      }
+    } catch (error) {
+      console.error('[COOKIE WORKER] Poll error:', error);
+    }
+  }
+
+  async extractCookie(data) {
+    const { accountId, email, profilePath } = data;
+    this.isProcessing = true;
+
+    let browser = null;
+
+    try {
+      console.log(`[COOKIE EXTRACT] Starting for account ${accountId}`);
+
+      if (!profilePath || !fs.existsSync(profilePath)) {
+        throw new Error('Profile not found. Please login first.');
+      }
+
+      console.log(`[COOKIE EXTRACT] Using profile: ${profilePath}`);
+
+      // Launch browser with existing profile
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath: '/usr/bin/google-chrome',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-blink-features=AutomationControlled'
+        ],
+        userDataDir: profilePath
+      });
+
+      const page = await browser.newPage();
+
+      // Navigate to Whisk
+      console.log('[COOKIE EXTRACT] Navigating to Whisk...');
+      await page.goto('https://labs.google.com/search/whisk', {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      });
+
+      await page.waitForTimeout(2000);
+
+      // Extract cookies
+      const cookies = await page.cookies();
+      console.log(`[COOKIE EXTRACT] Extracted ${cookies.length} cookies`);
+
+      // Find session cookie
+      const sessionCookie = cookies.find(c => 
+        c.name === '__Secure-1PSID' || 
+        c.name === '__Secure-3PSID'
+      );
+
+      if (!sessionCookie) {
+        throw new Error('Session cookie not found. Please login first.');
+      }
+
+      console.log(`[COOKIE EXTRACT] ✓ Found session cookie for ${email}`);
+
+      // Save to database
+      await Account.findByIdAndUpdate(accountId, {
+        $set: {
+          sessionCookie: sessionCookie.value,
+          cookies: cookies,
+          lastCookieUpdate: new Date(),
+          'metadata.cookieStatus': 'active',
+          'metadata.cookieExtractionRequested': null
+        }
+      });
+
+      console.log(`[COOKIE EXTRACT] ✓ Cookies saved to database for ${email}`);
+
+      return {
+        success: true,
+        email,
+        cookieCount: cookies.length
+      };
+
+    } catch (error) {
+      console.error(`[COOKIE EXTRACT] Error:`, error.message);
+
+      await Account.findByIdAndUpdate(accountId, {
+        $set: {
+          'metadata.lastError': error.message,
+          'metadata.lastErrorTime': new Date(),
+          'metadata.cookieExtractionRequested': null
+        }
+      });
+
+      throw error;
+
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+      this.isProcessing = false;
+    }
+  }
+}
+
+// Start worker
+const worker = new CookieWorker();
+worker.init();
+
+export default worker;
