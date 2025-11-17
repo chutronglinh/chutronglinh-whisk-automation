@@ -396,10 +396,9 @@ EOF
 configure_nginx() {
   print_step "STEP 13: Configuring Nginx"
 
-  # Get domain
-  echo -e "${YELLOW}Enter your domain (press Enter for localhost):${NC}"
-  read -p "Domain: " USER_DOMAIN
-  DOMAIN="${USER_DOMAIN:-localhost}"
+  # Use default domain (can be overridden with DOMAIN env var)
+  echo -e "${BLUE}Using domain: ${DOMAIN}${NC}"
+  echo -e "${YELLOW}To use custom domain, run: DOMAIN=yourdomain.com curl ... | sudo bash${NC}"
 
   cat > /etc/nginx/sites-available/$APP_NAME <<EOF
 upstream backend {
