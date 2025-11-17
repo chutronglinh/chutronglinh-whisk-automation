@@ -1,5 +1,6 @@
 import Account from '../models/Account.js';
 import fs from 'fs';
+import { loginQueue } from '../services/QueueService.js';
 
 class AccountController {
   // Get all accounts
@@ -334,11 +335,20 @@ class AccountController {
         });
       }
 
+      // Update account status
       await Account.findByIdAndUpdate(account._id, {
-        $set: { 
+        $set: {
           status: 'simple-login-pending',
           'metadata.simpleLoginRequested': new Date()
         }
+      });
+
+      // Add job to Bull queue
+      await loginQueue.add('manual-login', {
+        accountId: account._id.toString(),
+        email: account.email,
+        password: account.password,
+        twoFASecret: account.twoFASecret
       });
 
       return res.json({
