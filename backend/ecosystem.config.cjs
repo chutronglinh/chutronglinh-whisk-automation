@@ -16,7 +16,7 @@ module.exports = {
         PROFILE_PATH: '/opt/whisk-automation/data/profiles',
         UPLOAD_PATH: '/opt/whisk-automation/data/uploads',
         OUTPUT_PATH: '/opt/whisk-automation/data/output/images',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/api-error.log',
@@ -37,7 +37,7 @@ module.exports = {
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
         PROFILE_PATH: '/opt/whisk-automation/data/profiles',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-login-error.log',
@@ -58,7 +58,7 @@ module.exports = {
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
         PROFILE_PATH: '/opt/whisk-automation/data/profiles',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-simple-login-error.log',
@@ -79,7 +79,7 @@ module.exports = {
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
         PROFILE_PATH: '/opt/whisk-automation/data/profiles',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-profile-error.log',
@@ -100,7 +100,7 @@ module.exports = {
         REDIS_HOST: 'localhost',
         REDIS_PORT: 6379,
         PROFILE_PATH: '/opt/whisk-automation/data/profiles',
-        DISPLAY: ':0',
+        DISPLAY: ':99',
         CHROME_PATH: '/usr/bin/google-chrome'
       },
       error_file: './logs/worker-cookie-error.log',
