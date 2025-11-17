@@ -116,9 +116,11 @@ class CookieWorker {
           sessionCookie: sessionCookie.value,
           cookies: cookies,
           lastCookieUpdate: new Date(),
-          'metadata.cookieStatus': 'active',
-          'metadata.cookieExtractionRequested': null,
-          'metadata.cookieExtractionInProgress': null
+          'metadata.cookieStatus': 'active'
+        },
+        $unset: {
+          'metadata.cookieExtractionRequested': '',
+          'metadata.cookieExtractionInProgress': ''
         }
       });
 
@@ -136,9 +138,11 @@ class CookieWorker {
       await Account.findByIdAndUpdate(accountId, {
         $set: {
           'metadata.lastError': error.message,
-          'metadata.lastErrorTime': new Date(),
-          'metadata.cookieExtractionRequested': null,
-          'metadata.cookieExtractionInProgress': null
+          'metadata.lastErrorTime': new Date()
+        },
+        $unset: {
+          'metadata.cookieExtractionRequested': '',
+          'metadata.cookieExtractionInProgress': ''
         }
       });
 
