@@ -95,7 +95,7 @@ const processImageGeneration = async (job) => {
       imageModel: metadata?.imageModel || process.env.IMAGE_MODEL || 'IMAGEN_3_5',
       aspectRatio: metadata?.aspectRatio || process.env.DEFAULT_ASPECT_RATIO || 'IMAGE_ASPECT_RATIO_LANDSCAPE',
       mediaCategory: metadata?.mediaCategory || process.env.MEDIA_CATEGORY || 'MEDIA_CATEGORY_BOARD',
-      seed: metadata?.seed || null
+      seed: metadata?.seed || Math.floor(Math.random() * 1000000)  // Generate random seed between 0-999999
     };
 
     console.log(`[IMAGE GEN] Options:`, options);
