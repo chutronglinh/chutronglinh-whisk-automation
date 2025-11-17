@@ -47,11 +47,33 @@ curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/whisk-automation/main
 
 ## 🔧 Quản Lý Hệ Thống
 
+### PM2 Commands
+
 ```bash
 pm2 logs                # Xem logs
 pm2 restart all         # Restart
+pm2 status              # Xem trạng thái
+pm2 monit               # Giám sát realtime
 ./update.sh             # Update code mới
 ```
+
+### ⚠️ QUAN TRỌNG: PM2 Best Practices
+
+**KHÔNG BAO GIỜ** sử dụng `sudo pm2` sau khi cài đặt:
+
+```bash
+# ❌ SAI - Gây lỗi permission:
+sudo pm2 restart all
+sudo pm2 logs
+
+# ✅ ĐÚNG - Luôn chạy không sudo:
+pm2 restart all
+pm2 logs
+```
+
+**Tại sao?** Sử dụng `sudo pm2` sẽ tạo PM2 daemon thứ 2 chạy bằng root, gây xung đột permissions với Chrome profiles và dẫn đến lỗi "Permission denied".
+
+👉 **Gặp lỗi?** Xem: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 

@@ -258,8 +258,22 @@ install_pm2() {
     npm install -g pm2
   fi
 
-  # Setup PM2 startup
-  env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+  # Detect actual user (not root)
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
+  if [ -z "$ACTUAL_USER" ] || [ "$ACTUAL_USER" = "root" ]; then
+    print_warning "Cannot detect non-root user, PM2 will run as root"
+    env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root
+  else
+    ACTUAL_HOME=$(eval echo ~$ACTUAL_USER)
+    print_success "Setting up PM2 for user: $ACTUAL_USER"
+
+    # IMPORTANT: Setup PM2 startup for the actual user, NOT root
+    env PATH=$PATH:/usr/bin pm2 startup systemd -u $ACTUAL_USER --hp $ACTUAL_HOME
+  fi
 
   print_success "PM2 $(pm2 -v) installed"
 }
@@ -290,6 +304,21 @@ setup_application() {
   mkdir -p "$APP_DIR/data/uploads"
   mkdir -p "$APP_DIR/data/output/images"
   mkdir -p "$APP_DIR/logs"
+
+  # Detect actual user and set proper ownership
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    echo -e "${BLUE}Setting ownership to $ACTUAL_USER:$ACTUAL_USER${NC}"
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR/data"
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR/logs"
+    print_success "Ownership set to $ACTUAL_USER"
+  else
+    print_warning "Running as root, skipping ownership change"
+  fi
 
   print_success "Data directories created"
 }
@@ -531,27 +560,66 @@ EOF
 start_application() {
   print_step "STEP 14: Starting Application"
 
+  # Detect actual user
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
+  # CRITICAL: Kill ALL PM2 daemons to prevent permission conflicts
+  print_warning "Cleaning up existing PM2 instances..."
+
+  # Kill root PM2 daemon
+  pm2 kill 2>/dev/null || true
+
+  # Kill user PM2 daemon if different user
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    sudo -u $ACTUAL_USER pm2 kill 2>/dev/null || true
+  fi
+
+  # Kill any stuck Chrome processes
+  pkill -9 chrome 2>/dev/null || true
+  pkill -9 Chrome 2>/dev/null || true
+
+  print_success "Cleaned up existing processes"
+
   cd "$APP_DIR/backend"
 
-  # Stop existing processes
-  pm2 delete all 2>/dev/null || true
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    # Start PM2 as the actual user (NOT root)
+    echo -e "${BLUE}Starting PM2 as user: $ACTUAL_USER${NC}"
+    echo -e "${BLUE}Working directory: $(pwd)${NC}"
 
-  # Start with PM2
-  echo -e "${BLUE}Starting PM2 processes from: $(pwd)${NC}"
-  pm2 start ecosystem.config.cjs
+    # IMPORTANT: Run PM2 commands as the actual user to avoid permission issues
+    sudo -u $ACTUAL_USER bash -c "cd $APP_DIR/backend && pm2 start ecosystem.config.cjs"
 
-  # Wait for processes to start
-  sleep 3
+    # Wait for processes to start
+    sleep 3
 
-  # Verify processes are running
-  RUNNING_PROCESSES=$(pm2 jlist | grep -c '"pm2_env"' || echo "0")
-  if [ "$RUNNING_PROCESSES" -gt "0" ]; then
-    pm2 save
-    print_success "Application started with PM2 ($RUNNING_PROCESSES processes)"
+    # Verify and save as the actual user
+    RUNNING_PROCESSES=$(sudo -u $ACTUAL_USER pm2 jlist | grep -c '"pm2_env"' || echo "0")
+    if [ "$RUNNING_PROCESSES" -gt "0" ]; then
+      sudo -u $ACTUAL_USER pm2 save
+      print_success "Application started with PM2 ($RUNNING_PROCESSES processes) as user $ACTUAL_USER"
+    else
+      print_error "PM2 processes failed to start!"
+      sudo -u $ACTUAL_USER pm2 logs --lines 50
+      exit 1
+    fi
   else
-    print_error "PM2 processes failed to start!"
-    pm2 logs --lines 50
-    exit 1
+    # Fallback: Start as root (not recommended)
+    print_warning "Starting PM2 as root (not recommended for production)"
+    pm2 start ecosystem.config.cjs
+    sleep 3
+    RUNNING_PROCESSES=$(pm2 jlist | grep -c '"pm2_env"' || echo "0")
+    if [ "$RUNNING_PROCESSES" -gt "0" ]; then
+      pm2 save
+      print_success "Application started with PM2 ($RUNNING_PROCESSES processes) as root"
+    else
+      print_error "PM2 processes failed to start!"
+      pm2 logs --lines 50
+      exit 1
+    fi
   fi
 }
 
@@ -584,9 +652,20 @@ health_check() {
     fi
   done
 
-  # Check PM2
+  # Check PM2 with correct user
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
   echo ""
-  pm2 status
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    echo -e "${BLUE}PM2 Status (user: $ACTUAL_USER):${NC}"
+    sudo -u $ACTUAL_USER pm2 status
+  else
+    echo -e "${BLUE}PM2 Status (root):${NC}"
+    pm2 status
+  fi
 
   # Check API
   echo ""
@@ -623,12 +702,29 @@ print_completion() {
   echo -e "   Logs:      ${GREEN}$APP_DIR/logs${NC}"
   echo -e "   Data:      ${GREEN}$APP_DIR/data${NC}"
 
+  # Get actual user
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
   echo -e "\n${CYAN}🔧 Useful Commands:${NC}"
-  echo -e "   View logs:       ${YELLOW}pm2 logs${NC}"
-  echo -e "   Restart all:     ${YELLOW}pm2 restart all${NC}"
-  echo -e "   Stop all:        ${YELLOW}pm2 stop all${NC}"
-  echo -e "   Show status:     ${YELLOW}pm2 status${NC}"
-  echo -e "   Monitor:         ${YELLOW}pm2 monit${NC}"
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    echo -e "   ${RED}⚠️  IMPORTANT: Always run PM2 commands as user ${ACTUAL_USER}${NC}"
+    echo -e "   ${RED}⚠️  NEVER use 'sudo pm2' - this causes permission conflicts!${NC}"
+    echo -e ""
+    echo -e "   View logs:       ${YELLOW}pm2 logs${NC}"
+    echo -e "   Restart all:     ${YELLOW}pm2 restart all${NC}"
+    echo -e "   Stop all:        ${YELLOW}pm2 stop all${NC}"
+    echo -e "   Show status:     ${YELLOW}pm2 status${NC}"
+    echo -e "   Monitor:         ${YELLOW}pm2 monit${NC}"
+  else
+    echo -e "   View logs:       ${YELLOW}pm2 logs${NC}"
+    echo -e "   Restart all:     ${YELLOW}pm2 restart all${NC}"
+    echo -e "   Stop all:        ${YELLOW}pm2 stop all${NC}"
+    echo -e "   Show status:     ${YELLOW}pm2 status${NC}"
+    echo -e "   Monitor:         ${YELLOW}pm2 monit${NC}"
+  fi
   echo -e "   Update app:      ${YELLOW}cd $APP_DIR && ./update.sh${NC}"
 
   echo -e "\n${CYAN}📚 Next Steps:${NC}"
