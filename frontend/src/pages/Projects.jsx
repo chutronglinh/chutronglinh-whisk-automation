@@ -42,7 +42,7 @@ export default function Projects() {
 
   const fetchAccounts = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/accounts?status=active&limit=100`);
+      const response = await axios.get(`${API_BASE}/accounts?limit=100`);
       setAccounts(response.data.data);
     } catch (error) {
       console.error('Error fetching accounts:', error);
