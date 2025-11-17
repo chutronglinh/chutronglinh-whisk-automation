@@ -268,16 +268,7 @@ install_pm2() {
 setup_application() {
   print_step "STEP 8: Setting Up Application"
 
-  # Create directories
-  mkdir -p "$APP_DIR"
-  mkdir -p "$APP_DIR/data/profiles"
-  mkdir -p "$APP_DIR/data/uploads"
-  mkdir -p "$APP_DIR/data/output/images"
-  mkdir -p "$APP_DIR/logs"
-
-  print_success "Directories created at $APP_DIR"
-
-  # Clone repository
+  # Clone repository first
   if [ -d "$APP_DIR/.git" ]; then
     print_warning "Repository exists, pulling latest..."
     cd "$APP_DIR"
@@ -293,6 +284,14 @@ setup_application() {
   fi
 
   print_success "Repository cloned/updated"
+
+  # Create data directories after cloning
+  mkdir -p "$APP_DIR/data/profiles"
+  mkdir -p "$APP_DIR/data/uploads"
+  mkdir -p "$APP_DIR/data/output/images"
+  mkdir -p "$APP_DIR/logs"
+
+  print_success "Data directories created"
 }
 
 # Install app dependencies
