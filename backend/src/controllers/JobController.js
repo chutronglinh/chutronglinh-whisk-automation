@@ -1,6 +1,6 @@
 import Job from '../models/Job.js';
 import Prompt from '../models/Prompt.js';
-import { imageQueue } from '../config/queue.js';
+import { imageGenerationQueue } from '../services/QueueService.js';
 
 class JobController {
   async getAll(req, res) {
@@ -63,7 +63,7 @@ class JobController {
 
       for (const prompt of prompts) {
         for (const accountId of accountIds) {
-          const job = await imageQueue.add({
+          const job = await imageGenerationQueue.add({
             promptId: prompt._id,
             promptText: prompt.promptText,
             accountId,

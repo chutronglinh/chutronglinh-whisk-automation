@@ -21,7 +21,7 @@ const accountSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['NEW', 'simple-login-pending', 'SYNCED', 'ACTIVE', 'suspended'],
+    enum: ['NEW', 'simple-login-pending', 'SYNCED', 'ACTIVE', 'suspended', 'error'],
     default: 'NEW'
   },
   sessionCookie: {

@@ -4,6 +4,8 @@ import AccountController from '../controllers/AccountController.js';
 import PromptController from '../controllers/PromptController.js';
 import ProjectController from '../controllers/ProjectController.js';
 import GenerateController from '../controllers/GenerateController.js';
+import JobController from '../controllers/JobController.js';
+import ImageController from '../controllers/ImageController.js';
 
 const router = express.Router();
 
@@ -50,7 +52,27 @@ router.delete('/projects/:id', ProjectController.delete);
 
 // Generate routes
 router.post('/generate/start', GenerateController.startGeneration);
-router.get('/generate/status/:projectId', GenerateController.getJobStatus);
+router.get('/generate/status/:jobId', GenerateController.getJobStatus);
 router.get('/generate/queue-status', GenerateController.getQueueStatus);
+
+// Job routes
+router.get('/jobs', JobController.getAll);
+router.get('/jobs/stats', JobController.getStats);
+router.get('/jobs/:id', JobController.getById);
+router.post('/jobs/generate', JobController.generateImages);
+router.post('/jobs/:id/retry', JobController.retry);
+router.delete('/jobs/:id', JobController.cancel);
+
+// Image routes
+router.get('/images', ImageController.getAll);
+router.get('/images/:id', ImageController.getById);
+router.get('/images/:id/download', ImageController.download);
+router.delete('/images/:id', ImageController.delete);
+
+// Additional stats and utility routes
+router.get('/prompts/categories', PromptController.getCategories);
+router.get('/prompts/stats', PromptController.getStats);
+router.get('/projects/stats', ProjectController.getStats);
+router.get('/accounts/:accountId/projects', ProjectController.getByAccount);
 
 export default router;

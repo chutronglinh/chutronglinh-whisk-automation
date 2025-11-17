@@ -10,8 +10,16 @@ const imageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Prompt'
   },
-  accountId: String,
-  projectId: String,
+  accountId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Account',
+    required: true
+  },
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: true
+  },
   jobId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Job'

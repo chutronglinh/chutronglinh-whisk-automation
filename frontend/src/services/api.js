@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://192.168.163.149/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -16,10 +16,10 @@ export const accountsAPI = {
   create: (data) => api.post('/accounts', data),
   update: (id, data) => api.put(`/accounts/${id}`, data),
   delete: (id) => api.delete(`/accounts/${id}`),
-  importCSV: (formData) => api.post('/accounts/import-csv', formData, {
+  importCSV: (formData) => api.post('/accounts/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  manualLogin: (id) => api.post(`/accounts/${id}/manual-login`),
+  simpleLogin: (id) => api.post(`/accounts/${id}/simple-login`),
   getStats: () => api.get('/accounts/stats')
 };
 
@@ -46,7 +46,8 @@ export const jobsAPI = {
   getById: (id) => api.get(`/jobs/${id}`),
   getStats: () => api.get('/jobs/stats'),
   generate: (data) => api.post('/jobs/generate', data),
-  cancel: (id) => api.post(`/jobs/${id}/cancel`)
+  retry: (id) => api.post(`/jobs/${id}/retry`),
+  cancel: (id) => api.delete(`/jobs/${id}`)
 };
 
 // Prompts API

@@ -7,38 +7,50 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
+package-lock.json
+yarn.lock
 
 # ============================================
 # ENVIRONMENT & CONFIG
 # ============================================
-# Allow backend/.env for easy deployment
-# .env
+.env
 .env.local
 .env.*.local
-# *.env
+*.env
+!.env.example
 
-# Ignore sensitive env files
+# Backend env files
+backend/.env
 backend/.env.production
 backend/.env.local
+
+# Frontend env files
 frontend/.env
+frontend/.env.production
 frontend/.env.local
 
 # ============================================
 # DATA DIRECTORIES
 # ============================================
-# Chrome profiles
+# Chrome profiles (sensitive user data)
 data/profiles/
+backend/data/profiles/
 profiles/
 
 # Uploads
 data/uploads/
+backend/data/uploads/
 uploads/
+/tmp/uploads/
 
 # Generated images
 data/output/
+backend/data/output/
 output/
 
-# Logs
+# ============================================
+# LOGS
+# ============================================
 logs/
 *.log
 npm-debug.log*
@@ -50,9 +62,7 @@ pids
 *.seed
 *.pid.lock
 
-# ============================================
-# PM2
-# ============================================
+# PM2 logs
 .pm2/
 .pm2-dev/
 ecosystem.config.js.bak
@@ -64,6 +74,7 @@ dump.pm2
 dist/
 dist-ssr/
 build/
+frontend/dist/
 .next/
 out/
 .nuxt/
@@ -90,11 +101,6 @@ jspm_packages/
 # ============================================
 # VSCode
 .vscode/
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 *.code-workspace
 
 # IntelliJ IDEA
@@ -165,8 +171,6 @@ $RECYCLE.BIN/
 *.backup
 *.old
 *.orig
-*.swp
-*.swo
 
 # ============================================
 # DATABASE
@@ -178,7 +182,7 @@ $RECYCLE.BIN/
 *.db-wal
 *.db-shm
 
-# MongoDB
+# MongoDB data
 data/db/
 dump/
 
@@ -191,11 +195,8 @@ dump/
 # ============================================
 # REACT / VITE
 # ============================================
-# Vite
 .vite/
 *.local
-
-# React
 .eslintcache
 
 # ============================================
@@ -223,40 +224,19 @@ accounts.json.backup.*
 # ============================================
 # MISCELLANEOUS
 # ============================================
-# Optional npm cache directory
 .npm
-
-# Optional eslint cache
 .eslintcache
-
-# Optional stylelint cache
 .stylelintcache
-
-# Microbundle cache
 .rpt2_cache/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
-
-# Optional REPL history
 .node_repl_history
-
-# Yarn
 .yarn/cache
 .yarn/unplugged
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-
-# parcel-bundler cache
 .parcel-cache
-
-# Stores VSCode versions used for testing
 .vscode-test
-
-# yarn v2
-.yarn/cache
-.yarn/unplugged
-.yarn/build-state.yml
-.yarn/install-state.gz
-.pnp.*
+nul

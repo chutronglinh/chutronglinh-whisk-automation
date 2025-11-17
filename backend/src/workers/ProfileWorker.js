@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs-extra';
-import { profileQueue } from '../config/queue.js';
+import { profileQueue } from '../services/QueueService.js';
 import Account from '../models/Account.js';
 import Job from '../models/Job.js';
 import { io } from '../app.js';
