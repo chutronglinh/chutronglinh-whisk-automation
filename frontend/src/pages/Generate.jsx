@@ -35,7 +35,7 @@ export default function Generate() {
   const fetchAccounts = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE}/accounts?status=active&limit=100`);
+      const response = await axios.get(`${API_BASE}/accounts?limit=100`);
       const accs = response.data.data;
       setAccounts(accs);
       
