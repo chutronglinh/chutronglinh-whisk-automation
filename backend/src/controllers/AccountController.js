@@ -370,8 +370,23 @@ class AccountController {
         });
       }
 
+      // CRITICAL: Check if extraction is already in progress or requested
+      if (account.metadata?.cookieExtractionInProgress) {
+        return res.status(409).json({
+          success: false,
+          error: 'Cookie extraction already in progress. Please wait.'
+        });
+      }
+
+      if (account.metadata?.cookieExtractionRequested) {
+        return res.status(409).json({
+          success: false,
+          error: 'Cookie extraction already requested. Please wait.'
+        });
+      }
+
       await Account.findByIdAndUpdate(account._id, {
-        $set: { 
+        $set: {
           'metadata.cookieExtractionRequested': new Date()
         }
       });
