@@ -1,12 +1,12 @@
 module.exports = {
   apps: [
-    // API Server (2 instances)
+    // API Server (1 instance)
     {
       name: 'whisk-api',
       script: './src/app.js',
       cwd: '/opt/whisk-automation/backend',
-      instances: 2,
-      exec_mode: 'cluster',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
