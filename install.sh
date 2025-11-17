@@ -392,6 +392,74 @@ EOF
   print_success "Virtual display configured on :99"
 }
 
+# Setup xhost autostart for GUI environments
+setup_xhost_autostart() {
+  print_step "STEP 12.5: Configuring X Server Authorization for GUI Desktop"
+
+  # Detect if this is a GUI environment
+  if [ -n "$DISPLAY" ] && [ "$DISPLAY" != ":99" ]; then
+    echo -e "${BLUE}GUI Desktop environment detected (DISPLAY=$DISPLAY)${NC}"
+
+    # Get the actual user (not root)
+    ACTUAL_USER="${SUDO_USER:-$USER}"
+    if [ "$ACTUAL_USER" = "root" ]; then
+      # Try to detect the logged-in user
+      ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+    fi
+
+    if [ -z "$ACTUAL_USER" ] || [ "$ACTUAL_USER" = "root" ]; then
+      print_warning "Cannot detect non-root user, skipping xhost autostart setup"
+      return
+    fi
+
+    ACTUAL_HOME=$(eval echo ~$ACTUAL_USER)
+    echo -e "${BLUE}Setting up xhost autostart for user: ${ACTUAL_USER}${NC}"
+    echo -e "${BLUE}Home directory: ${ACTUAL_HOME}${NC}"
+
+    # Create autostart directory
+    AUTOSTART_DIR="$ACTUAL_HOME/.config/autostart"
+    mkdir -p "$AUTOSTART_DIR"
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$ACTUAL_HOME/.config"
+
+    # Create desktop entry for xhost
+    cat > "$AUTOSTART_DIR/xhost-allow-local.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=X Server Local Access
+Comment=Allow local connections to X server for Puppeteer Chrome
+Exec=/bin/bash -c "sleep 2 && xhost +local:"
+Terminal=false
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+    chown $ACTUAL_USER:$ACTUAL_USER "$AUTOSTART_DIR/xhost-allow-local.desktop"
+    chmod +x "$AUTOSTART_DIR/xhost-allow-local.desktop"
+
+    # Also add to .profile as backup
+    PROFILE_FILE="$ACTUAL_HOME/.profile"
+    if ! grep -q "xhost +local:" "$PROFILE_FILE" 2>/dev/null; then
+      echo "" >> "$PROFILE_FILE"
+      echo "# Allow local X server connections for Chrome automation" >> "$PROFILE_FILE"
+      echo "if [ -n \"\$DISPLAY\" ]; then" >> "$PROFILE_FILE"
+      echo "    xhost +local: 2>/dev/null" >> "$PROFILE_FILE"
+      echo "fi" >> "$PROFILE_FILE"
+      chown $ACTUAL_USER:$ACTUAL_USER "$PROFILE_FILE"
+    fi
+
+    # Run xhost now
+    sudo -u $ACTUAL_USER DISPLAY=$DISPLAY xhost +local: 2>/dev/null || true
+
+    print_success "X Server authorization configured for user $ACTUAL_USER"
+    print_success "xhost +local: will run automatically on login"
+
+  else
+    echo -e "${BLUE}Headless environment detected, skipping xhost setup${NC}"
+    print_success "Using Xvfb virtual display instead"
+  fi
+}
+
 # Configure Nginx
 configure_nginx() {
   print_step "STEP 13: Configuring Nginx"
@@ -572,6 +640,14 @@ print_completion() {
   echo -e "      ${YELLOW}nano $APP_DIR/backend/.env${NC}"
   echo -e "   4. Import accounts CSV via web interface"
 
+  # Show GUI-specific instructions if applicable
+  if [ -n "$DISPLAY" ] && [ "$DISPLAY" != ":99" ]; then
+    echo -e "\n${CYAN}🖥️  GUI Desktop Environment:${NC}"
+    echo -e "   ${GREEN}✓${NC} X Server authorization configured (xhost +local:)"
+    echo -e "   ${GREEN}✓${NC} Autostart enabled - will persist after reboot"
+    echo -e "   Chrome will open on your desktop for manual login"
+  fi
+
   echo -e "\n${CYAN}⚡ Quick Test:${NC}"
   echo -e "   ${YELLOW}curl http://localhost/api/health${NC}"
 
@@ -596,6 +672,7 @@ main() {
   build_frontend
   configure_environment
   setup_virtual_display
+  setup_xhost_autostart
   configure_nginx
   start_application
   configure_firewall
