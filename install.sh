@@ -304,6 +304,7 @@ setup_application() {
   mkdir -p "$APP_DIR/data/uploads"
   mkdir -p "$APP_DIR/data/output/images"
   mkdir -p "$APP_DIR/logs"
+  mkdir -p "$APP_DIR/backend/logs"
 
   # Detect actual user and set proper ownership
   ACTUAL_USER="${SUDO_USER:-$USER}"
@@ -313,9 +314,9 @@ setup_application() {
 
   if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
     echo -e "${BLUE}Setting ownership to $ACTUAL_USER:$ACTUAL_USER${NC}"
-    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR/data"
-    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR/logs"
-    print_success "Ownership set to $ACTUAL_USER"
+    # Set ownership on entire app directory to prevent PM2 permission issues
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR"
+    print_success "Ownership set to $ACTUAL_USER for entire application"
   else
     print_warning "Running as root, skipping ownership change"
   fi
