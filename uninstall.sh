@@ -7,6 +7,11 @@
 
 set -e
 
+# Parse command-line arguments
+FORCE_UNINSTALL="${1:-no}"
+REMOVE_MONGO="${2:-no}"
+REMOVE_REDIS="${3:-no}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -49,14 +54,17 @@ echo "   - Google Chrome"
 echo ""
 
 # Check for non-interactive mode
-if [ "$FORCE_UNINSTALL" != "yes" ]; then
+if [ "$FORCE_UNINSTALL" = "yes" ]; then
+  echo -e "${YELLOW}━━━ Running in non-interactive mode ━━━${NC}"
+  echo -e "${YELLOW}MongoDB will be removed: ${REMOVE_MONGO}${NC}"
+  echo -e "${YELLOW}Redis will be removed: ${REMOVE_REDIS}${NC}"
+  echo ""
+else
   read -p "Do you want to continue? (yes/no): " CONFIRM
   if [ "$CONFIRM" != "yes" ]; then
     echo -e "${BLUE}Uninstall cancelled.${NC}"
     exit 0
   fi
-else
-  echo -e "${YELLOW}Running in non-interactive mode (FORCE_UNINSTALL=yes)${NC}"
 fi
 
 echo ""
@@ -124,9 +132,6 @@ fi
 echo ""
 if [ "$FORCE_UNINSTALL" != "yes" ]; then
   read -p "Do you want to remove MongoDB database? (yes/no): " REMOVE_MONGO
-else
-  REMOVE_MONGO="${REMOVE_MONGO:-yes}"
-  echo -e "${YELLOW}MongoDB removal: $REMOVE_MONGO (override with REMOVE_MONGO env var)${NC}"
 fi
 
 if [ "$REMOVE_MONGO" = "yes" ]; then
@@ -143,9 +148,6 @@ fi
 echo ""
 if [ "$FORCE_UNINSTALL" != "yes" ]; then
   read -p "Do you want to remove Redis data? (yes/no): " REMOVE_REDIS
-else
-  REMOVE_REDIS="${REMOVE_REDIS:-yes}"
-  echo -e "${YELLOW}Redis removal: $REMOVE_REDIS (override with REMOVE_REDIS env var)${NC}"
 fi
 
 if [ "$REMOVE_REDIS" = "yes" ]; then
@@ -172,4 +174,10 @@ echo -e "${BLUE}System is now clean and ready for fresh installation!${NC}"
 echo ""
 echo -e "${YELLOW}To install again, run:${NC}"
 echo -e "${GREEN}curl -fsSL https://raw.githubusercontent.com/chutronglinh/chutronglinh-whisk-automation/main/install.sh | sudo bash${NC}"
+echo ""
+echo -e "${CYAN}Usage: $0 [force] [remove-mongo] [remove-redis]${NC}"
+echo -e "${CYAN}  force: 'yes' to skip confirmations${NC}"
+echo -e "${CYAN}  remove-mongo: 'yes' to remove MongoDB data${NC}"
+echo -e "${CYAN}  remove-redis: 'yes' to remove Redis data${NC}"
+echo -e "${CYAN}Example: curl ... | sudo bash -s yes yes yes${NC}"
 echo ""
