@@ -34,6 +34,7 @@ class CookieWorker {
     try {
       const pendingAccount = await Account.findOne({
         'metadata.cookieExtractionRequested': { $exists: true },
+        'metadata.cookieExtractionInProgress': { $exists: false },
         'metadata.profileReady': true
       }).sort({ 'metadata.cookieExtractionRequested': 1 });
 
