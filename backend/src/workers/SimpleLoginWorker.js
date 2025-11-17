@@ -73,10 +73,10 @@ class SimpleLoginWorker {
       });
 
       console.log(`[SIMPLE LOGIN] Launching with DISPLAY=${process.env.DISPLAY || ':0'}`);
-      
+
       browser = await puppeteer.launch({
         headless: false,
-        executablePath: '/usr/bin/google-chrome',
+        executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

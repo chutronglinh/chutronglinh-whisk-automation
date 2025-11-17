@@ -56,6 +56,7 @@ loginQueue.process('manual-login', async (job) => {
     // Launch Chrome with visible UI
     browser = await puppeteer.launch({
       headless: false,
+      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -63,7 +64,8 @@ loginQueue.process('manual-login', async (job) => {
         '--disable-blink-features=AutomationControlled',
         `--user-data-dir=${profileDir}`,
         '--window-size=1280,720',
-        '--start-maximized'
+        '--start-maximized',
+        `--display=${process.env.DISPLAY || ':0'}`
       ],
       defaultViewport: null
     });
