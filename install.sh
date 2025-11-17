@@ -147,21 +147,51 @@ install_nodejs() {
 
 # Install MongoDB
 install_mongodb() {
-  print_step "STEP 4: Installing MongoDB 7.0"
+  print_step "STEP 4: Installing MongoDB"
 
   if command -v mongod &> /dev/null; then
     print_warning "MongoDB already installed"
     return
   fi
 
-  # Import MongoDB public GPG key
-  curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-    gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+  # Detect Ubuntu version
+  UBUNTU_VERSION=$(lsb_release -cs)
 
-  # Add MongoDB repository
-  echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | \
-    tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+  echo -e "${BLUE}Detected Ubuntu: $UBUNTU_VERSION${NC}"
 
+  # Choose MongoDB version based on Ubuntu version
+  if [ "$UBUNTU_VERSION" = "noble" ]; then
+    # Ubuntu 24.04 - Use MongoDB 8.0
+    print_warning "Ubuntu 24.04 detected, installing MongoDB 8.0..."
+
+    curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
+      gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+
+  elif [ "$UBUNTU_VERSION" = "jammy" ]; then
+    # Ubuntu 22.04 - Use MongoDB 7.0
+    print_warning "Ubuntu 22.04 detected, installing MongoDB 7.0..."
+
+    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+      gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+
+  else
+    # Ubuntu 20.04 or older - Use MongoDB 7.0 with jammy repo
+    print_warning "Using MongoDB 7.0 for compatibility..."
+
+    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+      gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+  fi
+
+  # Install MongoDB
   apt-get update -qq
   apt-get install -y mongodb-org
 
@@ -170,7 +200,17 @@ install_mongodb() {
   systemctl enable mongod
   systemctl start mongod
 
-  print_success "MongoDB installed and started"
+  # Wait for MongoDB to start
+  sleep 3
+
+  # Verify MongoDB is running
+  if systemctl is-active --quiet mongod; then
+    MONGO_VERSION=$(mongod --version | head -n 1)
+    print_success "MongoDB installed and started: $MONGO_VERSION"
+  else
+    print_error "MongoDB failed to start"
+    systemctl status mongod
+  fi
 }
 
 # Install Redis
