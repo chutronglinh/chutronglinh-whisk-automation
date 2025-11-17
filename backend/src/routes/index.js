@@ -54,6 +54,12 @@ router.delete('/projects/:id', ProjectController.delete);
 router.post('/generate/start', GenerateController.startGeneration);
 router.get('/generate/status/:jobId', GenerateController.getJobStatus);
 router.get('/generate/queue-status', GenerateController.getQueueStatus);
+router.get('/generate/stats', GenerateController.getStats);
+
+// Generated images routes (for Gallery page)
+router.get('/generated-images', GenerateController.getAllImages);
+router.get('/generated-images/:id', GenerateController.getImageById);
+router.delete('/generated-images/:id', GenerateController.deleteImage);
 
 // Job routes
 router.get('/jobs', JobController.getAll);
