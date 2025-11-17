@@ -341,6 +341,18 @@ install_app_dependencies() {
   cd "$APP_DIR/frontend"
   npm install
   print_success "Frontend dependencies installed"
+
+  # CRITICAL: Fix ownership after npm install (npm creates files as root)
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    echo -e "${BLUE}Re-applying ownership after npm install...${NC}"
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR"
+    print_success "Final ownership set to $ACTUAL_USER"
+  fi
 }
 
 # Build frontend
@@ -349,6 +361,16 @@ build_frontend() {
 
   cd "$APP_DIR/frontend"
   npm run build
+
+  # Fix ownership after build (build may create files as root)
+  ACTUAL_USER="${SUDO_USER:-$USER}"
+  if [ "$ACTUAL_USER" = "root" ]; then
+    ACTUAL_USER=$(who | awk '{print $1}' | head -n 1)
+  fi
+
+  if [ -n "$ACTUAL_USER" ] && [ "$ACTUAL_USER" != "root" ]; then
+    chown -R $ACTUAL_USER:$ACTUAL_USER "$APP_DIR/frontend/dist"
+  fi
 
   print_success "Frontend built successfully"
 }
