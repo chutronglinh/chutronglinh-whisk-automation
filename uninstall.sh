@@ -48,10 +48,15 @@ echo "   - Node.js"
 echo "   - Google Chrome"
 echo ""
 
-read -p "Do you want to continue? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-  echo -e "${BLUE}Uninstall cancelled.${NC}"
-  exit 0
+# Check for non-interactive mode
+if [ "$FORCE_UNINSTALL" != "yes" ]; then
+  read -p "Do you want to continue? (yes/no): " CONFIRM
+  if [ "$CONFIRM" != "yes" ]; then
+    echo -e "${BLUE}Uninstall cancelled.${NC}"
+    exit 0
+  fi
+else
+  echo -e "${YELLOW}Running in non-interactive mode (FORCE_UNINSTALL=yes)${NC}"
 fi
 
 echo ""
@@ -117,7 +122,13 @@ fi
 
 # 7. Optional: Remove MongoDB data
 echo ""
-read -p "Do you want to remove MongoDB database? (yes/no): " REMOVE_MONGO
+if [ "$FORCE_UNINSTALL" != "yes" ]; then
+  read -p "Do you want to remove MongoDB database? (yes/no): " REMOVE_MONGO
+else
+  REMOVE_MONGO="${REMOVE_MONGO:-yes}"
+  echo -e "${YELLOW}MongoDB removal: $REMOVE_MONGO (override with REMOVE_MONGO env var)${NC}"
+fi
+
 if [ "$REMOVE_MONGO" = "yes" ]; then
   echo -e "${BLUE}━━━ Removing MongoDB database ━━━${NC}"
   systemctl stop mongod 2>/dev/null || true
@@ -130,7 +141,13 @@ fi
 
 # 8. Optional: Remove Redis data
 echo ""
-read -p "Do you want to remove Redis data? (yes/no): " REMOVE_REDIS
+if [ "$FORCE_UNINSTALL" != "yes" ]; then
+  read -p "Do you want to remove Redis data? (yes/no): " REMOVE_REDIS
+else
+  REMOVE_REDIS="${REMOVE_REDIS:-yes}"
+  echo -e "${YELLOW}Redis removal: $REMOVE_REDIS (override with REMOVE_REDIS env var)${NC}"
+fi
+
 if [ "$REMOVE_REDIS" = "yes" ]; then
   echo -e "${BLUE}━━━ Removing Redis data ━━━${NC}"
   systemctl stop redis-server 2>/dev/null || true
