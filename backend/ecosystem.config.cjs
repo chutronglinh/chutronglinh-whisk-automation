@@ -87,13 +87,13 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss'
     },
     
-    // Cookie Extraction Worker (2 instances)
+    // Cookie Extraction Worker (1 instance - sequential processing to avoid Chrome profile conflicts)
     {
       name: 'whisk-worker-cookie',
       script: './src/workers/CookieWorker.js',
       cwd: '/opt/whisk-automation/backend',
-      instances: 2,
-      exec_mode: 'cluster',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         MONGODB_URI: 'mongodb://localhost:27017/whisk-automation',

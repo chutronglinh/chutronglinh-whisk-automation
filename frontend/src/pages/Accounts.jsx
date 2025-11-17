@@ -197,14 +197,17 @@ export default function Accounts() {
     if (!date) return '-';
     const d = new Date(date);
     const now = new Date();
-    const hours = Math.floor((now - d) / 3600000);
-    
-    if (hours < 1) return 'Just now';
+    const diffMs = now - d;
+    const minutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMs / 3600000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
-    
+
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
-    
+
     return d.toLocaleDateString();
   };
 
@@ -281,7 +284,11 @@ export default function Accounts() {
                     {getStatusBadge(account.status)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {account.sessionCookie ? (
+                    {account.metadata?.cookieExtractionInProgress ? (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 animate-pulse">
+                        ⏳ Extracting...
+                      </span>
+                    ) : account.sessionCookie ? (
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                         ✅ Active
                       </span>
@@ -316,17 +323,27 @@ export default function Accounts() {
                       {!account.sessionCookie && (
                         <button
                           onClick={() => handleExtractCookie(account._id, false)}
-                          className="text-green-600 hover:text-green-900 font-medium"
+                          disabled={account.metadata?.cookieExtractionInProgress}
+                          className={`font-medium ${
+                            account.metadata?.cookieExtractionInProgress
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-green-600 hover:text-green-900'
+                          }`}
                         >
                           Get Cookie
                         </button>
                       )}
-                      
+
                       {/* Refresh Cookie button - LUÔN HIỆN nếu đã có cookie */}
                       {account.sessionCookie && (
                         <button
                           onClick={() => handleExtractCookie(account._id, true)}
-                          className="text-orange-600 hover:text-orange-900 font-medium"
+                          disabled={account.metadata?.cookieExtractionInProgress}
+                          className={`font-medium ${
+                            account.metadata?.cookieExtractionInProgress
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-orange-600 hover:text-orange-900'
+                          }`}
                         >
                           Refresh Cookie
                         </button>

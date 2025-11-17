@@ -59,6 +59,13 @@ class CookieWorker {
     try {
       console.log(`[COOKIE EXTRACT] Starting for ${email}`);
 
+      // Mark as processing so frontend can show "Extracting cookie..." status
+      await Account.findByIdAndUpdate(accountId, {
+        $set: {
+          'metadata.cookieExtractionInProgress': true
+        }
+      });
+
       if (!profilePath || !fs.existsSync(profilePath)) {
         throw new Error('Profile not found. Please login first.');
       }
@@ -109,7 +116,8 @@ class CookieWorker {
           cookies: cookies,
           lastCookieUpdate: new Date(),
           'metadata.cookieStatus': 'active',
-          'metadata.cookieExtractionRequested': null
+          'metadata.cookieExtractionRequested': null,
+          'metadata.cookieExtractionInProgress': null
         }
       });
 
@@ -128,7 +136,8 @@ class CookieWorker {
         $set: {
           'metadata.lastError': error.message,
           'metadata.lastErrorTime': new Date(),
-          'metadata.cookieExtractionRequested': null
+          'metadata.cookieExtractionRequested': null,
+          'metadata.cookieExtractionInProgress': null
         }
       });
 
