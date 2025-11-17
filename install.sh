@@ -21,9 +21,9 @@ NC='\033[0m' # No Color
 # Configuration
 APP_NAME="whisk-automation"
 APP_DIR="/opt/${APP_NAME}"
-REPO_URL="${REPO_URL:-https://github.com/YOUR_USERNAME/whisk-automation.git}"
+REPO_URL="${REPO_URL:-https://github.com/chutronglinh/chutronglinh-whisk-automation.git}"
 NODE_VERSION="20"
-DOMAIN="${DOMAIN:-localhost}"
+DOMAIN="${DOMAIN:-_}"
 
 # Print banner
 print_banner() {
@@ -127,11 +127,9 @@ install_nodejs() {
 
   if command -v node &> /dev/null; then
     CURRENT_NODE=$(node -v)
-    print_warning "Node.js already installed: $CURRENT_NODE"
-    read -p "Reinstall? (y/n): " reinstall
-    if [ "$reinstall" != "y" ]; then
-      return
-    fi
+    print_success "Node.js already installed: $CURRENT_NODE"
+    print_success "NPM $(npm -v) installed"
+    return
   fi
 
   # Remove old nodejs
@@ -283,17 +281,14 @@ setup_application() {
   if [ -d "$APP_DIR/.git" ]; then
     print_warning "Repository exists, pulling latest..."
     cd "$APP_DIR"
-    git pull origin main
+    git pull origin main 2>/dev/null || git pull origin master 2>/dev/null || true
   else
-    print_warning "Enter your GitHub repository URL:"
-    read -p "Repository URL: " USER_REPO
-    if [ -z "$USER_REPO" ]; then
-      REPO_URL="$REPO_URL"
-    else
-      REPO_URL="$USER_REPO"
-    fi
-
-    git clone "$REPO_URL" "$APP_DIR"
+    print_warning "Cloning repository..."
+    git clone "$REPO_URL" "$APP_DIR" || {
+      print_error "Failed to clone repository"
+      print_warning "Please set REPO_URL environment variable before running"
+      exit 1
+    }
     cd "$APP_DIR"
   fi
 
