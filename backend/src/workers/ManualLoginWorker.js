@@ -1,13 +1,9 @@
 import { loginQueue } from '../services/QueueService.js';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import puppeteer from 'puppeteer';
 import Account from '../models/Account.js';
 import path from 'path';
 import fs from 'fs';
-import speakeasy from 'speakeasy';
 import { connectDB } from '../config/database.js';
-
-puppeteer.use(StealthPlugin());
 
 // Connect to MongoDB before processing jobs
 let dbConnected = false;
@@ -72,103 +68,84 @@ loginQueue.process('manual-login', async (job) => {
 
     const page = await browser.newPage();
 
-    // Set user agent
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
-    // Navigate to Gmail login
-    await page.goto('https://accounts.google.com/signin/v2/identifier', {
+    // Navigate to Whisk (let Google SSO handle login)
+    console.log('[MANUAL LOGIN] Navigating to Whisk...');
+    await page.goto('https://labs.google/fx/tools/whisk', {
       waitUntil: 'networkidle2',
       timeout: 60000
     });
 
-    // Wait a bit for page to load
-    await page.waitForTimeout(2000);
+    console.log('[MANUAL LOGIN] ✓ Browser opened for manual login');
+    console.log('[MANUAL LOGIN] Please login manually and close the browser when done...');
 
-    // Fill email
-    const emailInput = await page.$('input[type="email"]');
-    if (emailInput) {
-      await emailInput.type(email, { delay: 100 });
-      await page.waitForTimeout(1000);
-      
-      // Click Next
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(3000);
-    }
-
-    // Fill password
-    const passwordInput = await page.$('input[type="password"]');
-    if (passwordInput) {
-      await passwordInput.type(password, { delay: 100 });
-      await page.waitForTimeout(1000);
-      
-      // Click Next
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(5000);
-    }
-
-    // Handle 2FA if needed
-    if (twoFASecret) {
-      try {
-        const totpInput = await page.$('input[type="tel"]');
-        if (totpInput) {
-          const token = speakeasy.totp({
-            secret: twoFASecret,
-            encoding: 'base32'
-          });
-          
-          await totpInput.type(token, { delay: 100 });
-          await page.waitForTimeout(1000);
-          await page.keyboard.press('Enter');
-          await page.waitForTimeout(5000);
+    // Wait for browser to be closed by user
+    await new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (!browser.isConnected()) {
+          clearInterval(checkInterval);
+          resolve();
         }
-      } catch (err) {
-        console.log('[MANUAL LOGIN] 2FA not required or error:', err.message);
-      }
-    }
+      }, 1000);
+    });
 
-    // Wait for user to complete any additional steps
-    console.log('[MANUAL LOGIN] Waiting for login completion (max 5 minutes)...');
-    
-    // Wait for either success or timeout
-    await Promise.race([
-      page.waitForNavigation({ 
-        waitUntil: 'networkidle2',
-        timeout: 300000 // 5 minutes
-      }),
-      page.waitForFunction(
-        () => window.location.hostname.includes('google.com') && 
-              !window.location.pathname.includes('signin'),
-        { timeout: 300000 }
-      )
-    ]);
+    console.log('[MANUAL LOGIN] ✓ Browser closed by user');
+
+    // Reopen browser headless to extract cookies
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ],
+      userDataDir: profileDir
+    });
+
+    const cookiePage = await browser.newPage();
+    await cookiePage.goto('https://labs.google/fx/tools/whisk', {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    });
+
+    await cookiePage.waitForTimeout(2000);
 
     // Extract cookies
-    const cookies = await page.cookies();
-    
+    const cookies = await cookiePage.cookies();
+
+    // Find the session cookie
+    const COOKIE_NAME = '__Secure-next-auth.session-token';
+    const sessionCookie = cookies.find(c => c.name === COOKIE_NAME);
+
+    if (!sessionCookie) {
+      throw new Error('Session cookie not found. Please ensure you logged in correctly.');
+    }
+
+    console.log('[MANUAL LOGIN] ✓ Session cookie found');
+
     // Update account in database
     await Account.findByIdAndUpdate(accountId, {
+      sessionCookie: sessionCookie.value,
       cookies: cookies,
-      status: 'active',
+      status: 'ACTIVE',
       lastLogin: new Date(),
       lastCookieUpdate: new Date(),
       loginAttempts: 0,
-      'metadata.userAgent': await page.evaluate(() => navigator.userAgent),
-      'metadata.profilePath': profileDir
+      'metadata.cookieStatus': 'active',
+      'metadata.profilePath': profileDir,
+      'metadata.profileReady': true
     });
 
-    console.log(`[MANUAL LOGIN] Success for ${email}. Cookies saved.`);
-
-    // Keep browser open for 30 seconds so user can verify
-    await page.waitForTimeout(30000);
+    console.log(`[MANUAL LOGIN] Success for ${email}. Session cookie saved.`);
 
     return {
       success: true,
       email,
+      sessionCookie: sessionCookie.value.substring(0, 30) + '...',
       cookiesCount: cookies.length,
       profilePath: profileDir,
-      message: 'Login successful, cookies extracted'
+      message: 'Login successful, session cookie extracted'
     };
 
   } catch (error) {
@@ -176,15 +153,21 @@ loginQueue.process('manual-login', async (job) => {
 
     // Update account status
     await Account.findByIdAndUpdate(accountId, {
-      status: 'error',
+      status: 'NEW',
+      'metadata.lastError': error.message,
+      'metadata.lastErrorTime': new Date(),
       $inc: { loginAttempts: 1 }
     });
 
     throw error;
 
   } finally {
-    if (browser) {
-      await browser.close();
+    if (browser && browser.isConnected()) {
+      try {
+        await browser.close();
+      } catch (e) {
+        // Browser already closed
+      }
     }
   }
 });
