@@ -4,6 +4,7 @@ module.exports = {
     {
       name: 'whisk-api',
       script: './src/app.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 2,
       exec_mode: 'cluster',
       env: {
@@ -27,6 +28,7 @@ module.exports = {
     {
       name: 'whisk-worker-login',
       script: './src/workers/ManualLoginWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 1,
       exec_mode: 'cluster',
       env: {
@@ -47,6 +49,7 @@ module.exports = {
     {
       name: 'whisk-worker-simple-login',
       script: './src/workers/SimpleLoginWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 1,
       exec_mode: 'cluster',
       env: {
@@ -67,6 +70,7 @@ module.exports = {
     {
       name: 'whisk-worker-profile',
       script: './src/workers/ProfileWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 1,
       exec_mode: 'cluster',
       env: {
@@ -87,6 +91,7 @@ module.exports = {
     {
       name: 'whisk-worker-cookie',
       script: './src/workers/CookieWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 2,
       exec_mode: 'cluster',
       env: {
@@ -107,6 +112,7 @@ module.exports = {
     {
       name: 'whisk-worker-project',
       script: './src/workers/ProjectCreationWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 2,
       exec_mode: 'cluster',
       env: {
@@ -124,6 +130,7 @@ module.exports = {
     {
       name: 'whisk-worker-image',
       script: './src/workers/ImageGenerationWorker.js',
+      cwd: '/opt/whisk-automation/backend',
       instances: 4,
       exec_mode: 'cluster',
       env: {

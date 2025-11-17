@@ -470,10 +470,22 @@ start_application() {
   pm2 delete all 2>/dev/null || true
 
   # Start with PM2
+  echo -e "${BLUE}Starting PM2 processes from: $(pwd)${NC}"
   pm2 start ecosystem.config.cjs
-  pm2 save
 
-  print_success "Application started with PM2"
+  # Wait for processes to start
+  sleep 3
+
+  # Verify processes are running
+  RUNNING_PROCESSES=$(pm2 jlist | grep -c '"pm2_env"' || echo "0")
+  if [ "$RUNNING_PROCESSES" -gt "0" ]; then
+    pm2 save
+    print_success "Application started with PM2 ($RUNNING_PROCESSES processes)"
+  else
+    print_error "PM2 processes failed to start!"
+    pm2 logs --lines 50
+    exit 1
+  fi
 }
 
 # Configure firewall
