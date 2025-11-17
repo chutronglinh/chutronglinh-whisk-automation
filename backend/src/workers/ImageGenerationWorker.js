@@ -139,7 +139,7 @@ const processImageGeneration = async (job) => {
         promptId: promptId || null,
         workflowId: project.workflowId,
         prompt: prompt,
-        imageUrl: `/output/images/${filename}`,
+        imageUrl: `/output/${filename}`,
         filename: filename,
         metadata: {
           imageModel: options.imageModel,
